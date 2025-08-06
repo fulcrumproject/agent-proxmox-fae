@@ -22,6 +22,10 @@ type Config struct {
 
 	// Logging
 	LogConfig logging.Conf `json:"log" validate:"required"`
+
+	// Proxmox API connection
+	ProxmoxAPIToken string `json:"proxmoxApiToken" validate:"required" env:"PROXMOX_API_TOKEN"` // Authentication token for the agent
+	ProxmoxAPIURL   string `json:"proxmoxApiUrl" validate:"required" env:"PROXMOX_API_URL"`
 }
 
 // DefaultConfig returns the default configuration
