@@ -44,6 +44,25 @@ type PveUserResources struct {
 	OSType map[string]string `json:"ostype"`
 }
 
+// NodesMetrics represents the metrics for all nodes
+type NodesMetrics struct {
+	Metrics map[string]NodesMetricsNode `json:"metrics"`
+}
+
+// NodesMetricsNode represents the metrics for a single node
+type NodesMetricsNode struct {
+	Mem  NodesMetricsNodeData `json:"mem"`
+	CPU  NodesMetricsNodeData `json:"cpu"`
+	Disk NodesMetricsNodeData `json:"disk"`
+}
+
+// NodesMetricsNodeData represents the data for a specific metric
+type NodesMetricsNodeData struct {
+	Cur float64 `json:"cur"`
+	Max float64 `json:"max"`
+	Pct float64 `json:"pct"`
+}
+
 // NewClient creates a new Proxmox API REST client
 func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 	// Create a new resty client
@@ -141,4 +160,42 @@ func (c *Client) GetUserPools(username string) (*PveUserResources, error) {
 	}
 
 	return &resources, nil
+}
+
+// GetNodes retrieves the list of available nodes
+func (c *Client) GetNodes() ([]string, error) {
+	var nodes []string
+
+	resp, err := c.restyClient.R().
+		SetResult(&nodes).
+		Get("/fae/v1/nodes")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get nodes request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nodes, nil
+}
+
+// GetNodesMetrics retrieves the metrics for all nodes
+func (c *Client) GetNodesMetrics() (*NodesMetrics, error) {
+	var metrics NodesMetrics
+
+	resp, err := c.restyClient.R().
+		SetResult(&metrics).
+		Get("/fae/v1/nodes/metrics")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nodes metrics: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get nodes metrics request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &metrics, nil
 }

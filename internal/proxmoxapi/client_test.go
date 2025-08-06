@@ -60,4 +60,25 @@ func TestClient(t *testing.T) {
 			t.Logf("Retrieved user pools: %+v", pools)
 		}
 	})
+
+	t.Run("GetNodes", func(t *testing.T) {
+		nodes, err := client.GetNodes()
+		if err != nil {
+			t.Logf("GetNodes returned error (may be expected): %v", err)
+		} else {
+			assert.NotNil(t, nodes, "Nodes should not be nil when no error occurs")
+			t.Logf("Retrieved nodes: %+v", nodes)
+		}
+	})
+
+	t.Run("GetNodesMetrics", func(t *testing.T) {
+		metrics, err := client.GetNodesMetrics()
+		if err != nil {
+			t.Logf("GetNodesMetrics returned error (may be expected): %v", err)
+		} else {
+			assert.NotNil(t, metrics, "Nodes metrics should not be nil when no error occurs")
+			assert.NotNil(t, metrics.Metrics, "Metrics map should not be nil")
+			t.Logf("Retrieved nodes metrics: %+v", metrics)
+		}
+	})
 }
