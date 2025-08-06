@@ -23,9 +23,16 @@ type Config struct {
 	// Logging
 	LogConfig logging.Conf `json:"log" validate:"required"`
 
-	// Proxmox API connection
-	ProxmoxAPIToken string `json:"proxmoxApiToken" validate:"required" env:"PROXMOX_API_TOKEN"` // Authentication token for the agent
-	ProxmoxAPIURL   string `json:"proxmoxApiUrl" validate:"required" env:"PROXMOX_API_URL"`
+	// ProxmoxAPI API configuration
+	ProxmoxAPI ProxmoxAPIConfig `json:"proxmox" validate:"required" env:"PROXMOX_API"`
+}
+
+// ProxmoxAPIConfig holds the configuration for Proxmox API connection
+type ProxmoxAPIConfig struct {
+	APIToken        string        `json:"apiToken" validate:"required" env:"TOKEN"` // Authentication token for Proxmox API
+	APIURL          string        `json:"apiUrl" validate:"required" env:"URL"`     // Base URL for Proxmox API
+	InsecureSkipTLS bool          `json:"insecureSkipTls" env:"INSECURE_SKIP_TLS"`  // Skip TLS certificate verification
+	Timeout         time.Duration `json:"timeout" env:"TIMEOUT"`                    // HTTP request timeout
 }
 
 // DefaultConfig returns the default configuration
@@ -35,5 +42,11 @@ func DefaultConfig() *Config {
 		FulcrumAPIURL:        "http://localhost:3000",
 		JobPollInterval:      5 * time.Second,
 		MetricReportInterval: 30 * time.Second,
+		ProxmoxAPI: ProxmoxAPIConfig{
+			APIToken:        "", // Must be provided
+			APIURL:          "", // Must be provided
+			InsecureSkipTLS: false,
+			Timeout:         30 * time.Second,
+		},
 	}
 }

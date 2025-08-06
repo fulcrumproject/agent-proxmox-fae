@@ -136,12 +136,14 @@ Jobs are processed according to the state machine rules and Proxmox API capabili
 
 ## Proxmox Integration
 
-The agent integrates with Proxmox Virtual Environment through the following mechanisms:
+The agent integrates with Proxmox Virtual Environment through the Opiquad Enhanced Proxmox API wrapper, which provides additional features and simplified access to Proxmox functionality.
 
 ### API Communication
-- Uses Proxmox VE REST API for all VM operations
+- Uses the **Opiquad Enhanced Proxmox API wrapper** for streamlined VM operations
+- Built on top of Proxmox VE REST API with enhanced functionality
 - Supports authentication via API tokens or username/password
 - Handles API rate limiting and connection pooling
+- Provides additional endpoints for improved VM management and monitoring
 
 ### VM Management
 - Creates VMs from templates or ISO images
