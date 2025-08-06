@@ -33,6 +33,7 @@ type ProxmoxAPIConfig struct {
 	APIURL          string        `json:"apiUrl" validate:"required" env:"URL"`     // Base URL for Proxmox API
 	InsecureSkipTLS bool          `json:"insecureSkipTls" env:"INSECURE_SKIP_TLS"`  // Skip TLS certificate verification
 	Timeout         time.Duration `json:"timeout" env:"TIMEOUT"`                    // HTTP request timeout
+	Debug           bool          `json:"debug" env:"DEBUG"`                        // Enable debug logging for HTTP requests
 }
 
 // DefaultConfig returns the default configuration
@@ -47,6 +48,7 @@ func DefaultConfig() *Config {
 			APIURL:          "", // Must be provided
 			InsecureSkipTLS: false,
 			Timeout:         30 * time.Second,
+			Debug:           false,
 		},
 	}
 }

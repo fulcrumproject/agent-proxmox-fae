@@ -30,7 +30,8 @@ func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 		SetBaseURL(cfg.APIURL).
 		SetHeader("Authorization", cfg.APIToken).
 		SetHeader("Content-Type", "application/json").
-		SetTimeout(cfg.Timeout)
+		SetTimeout(cfg.Timeout).
+		SetDebug(cfg.Debug)
 
 	// Configure TLS settings
 	restyClient.SetTLSClientConfig(&tls.Config{
