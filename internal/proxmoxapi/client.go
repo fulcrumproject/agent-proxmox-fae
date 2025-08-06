@@ -20,6 +20,30 @@ type PingResponse struct {
 	Proxmox bool `json:"proxmox"`
 }
 
+// PveUser represents a PVE user response
+type PveUser struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	HasAPI  bool   `json:"hasApi"`
+}
+
+// PveUserCreation represents the request for creating a new PVE user
+type PveUserCreation struct {
+	UserID    string `json:"userid"`
+	FirstName string `json:"firstname"`
+	LastName  string `json:"lastname"`
+	PoolID    string `json:"poolid"`
+}
+
+// PveUserResources represents the resources available to a PVE user
+type PveUserResources struct {
+	NextID int               `json:"nextid"`
+	Nodes  []interface{}     `json:"nodes"`
+	Pools  []interface{}     `json:"pools"`
+	IDE2   []interface{}     `json:"ide2"`
+	OSType map[string]string `json:"ostype"`
+}
+
 // NewClient creates a new Proxmox API REST client
 func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 	// Create a new resty client
@@ -60,4 +84,61 @@ func (c *Client) Ping() (*PingResponse, error) {
 	}
 
 	return &pingResp, nil
+}
+
+// CreateUser creates a new PVE user
+func (c *Client) CreateUser(req *PveUserCreation) error {
+	resp, err := c.restyClient.R().
+		SetBody(req).
+		Post("/fae/v1/pveuser")
+
+	if err != nil {
+		return fmt.Errorf("failed to create PVE user: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("create user request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetUser retrieves a PVE user by username
+func (c *Client) GetUser(username string) (*PveUser, error) {
+	var user PveUser
+
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetResult(&user).
+		Get("/fae/v1/pveuser")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PVE user: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get user request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &user, nil
+}
+
+// GetUserPools retrieves the pools and resources available to a PVE user
+func (c *Client) GetUserPools(username string) (*PveUserResources, error) {
+	var resources PveUserResources
+
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetResult(&resources).
+		Get("/fae/v1/pveuser/resources")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PVE user pools: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get user pools request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &resources, nil
 }
