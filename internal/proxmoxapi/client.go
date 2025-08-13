@@ -6,7 +6,8 @@ import (
 
 	"resty.dev/v3"
 
-	"fulcrumproject.org/agent-proxmox-wrapped/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent"
 )
 
 // Client represents a REST client for the Proxmox API
@@ -14,34 +15,18 @@ type Client struct {
 	restyClient *resty.Client
 }
 
-// PingResponse represents the response from the ping endpoint
-type PingResponse struct {
-	Fae     bool `json:"fae"`
-	Proxmox bool `json:"proxmox"`
-}
-
 // PveUser represents a PVE user response
 type PveUser struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	HasAPI  bool   `json:"hasApi"`
+	Enabled bool `json:"enabled"`
+	HasAPI  bool `json:"hasApi"`
+	Status  bool `json:"status"`
 }
 
 // PveUserCreation represents the request for creating a new PVE user
 type PveUserCreation struct {
-	UserID    string `json:"userid"`
-	FirstName string `json:"firstname"`
-	LastName  string `json:"lastname"`
-	PoolID    string `json:"poolid"`
-}
-
-// PveUserResources represents the resources available to a PVE user
-type PveUserResources struct {
-	NextID int               `json:"nextid"`
-	Nodes  []interface{}     `json:"nodes"`
-	Pools  []interface{}     `json:"pools"`
-	IDE2   []interface{}     `json:"ide2"`
-	OSType map[string]string `json:"ostype"`
+	UserID        string `json:"userid"`
+	PoolID        string `json:"poolid"`
+	ResetIfExists bool   `json:"reset_if_exists"`
 }
 
 // NodesMetrics represents the metrics for all nodes
@@ -68,49 +53,50 @@ type NextID struct {
 	NextID int `json:"nextid"`
 }
 
-// Vm represents a virtual machine
-type Vm struct {
-	VMID   int    `json:"vmid"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Node   string `json:"node"`
-	Pool   string `json:"pool"`
-}
-
-// VmCreation represents the request for creating a new VM
-type VmCreation struct {
-	Node    string `json:"node"`
-	VMID    int    `json:"vmid"`
-	Name    string `json:"name"`
-	Pool    string `json:"pool"`
-	Sockets int    `json:"sockets"`
-	Cores   int    `json:"cores"`
-	Memory  int    `json:"memory"`
-	SCSI0   string `json:"scsi0"`
-	IDE2    string `json:"ide2"`
-	OSType  string `json:"ostype"`
-}
-
-// VmClonation represents the request for cloning a VM
-type VmClonation struct {
+// VmClone represents the request for cloning a VM
+type VmClone struct {
 	NewID int    `json:"newid"`
 	Name  string `json:"name"`
 	Pool  string `json:"pool"`
 }
 
-// VmMigration represents the request for migrating a VM
-type VmMigration struct {
+// VmMigrate represents the request for migrating a VM
+type VmMigrate struct {
 	Target string `json:"target"`
 }
 
 // VncEnable represents the request for enabling VNC
 type VncEnable struct {
 	SourceIP string `json:"source_ip"`
+	Web      bool   `json:"web"`
 }
 
 // VncEnableResponse represents the response for VNC enabling
 type VncEnableResponse struct {
 	Host string `json:"host"`
+}
+
+// PveUserAddPool represents the request for adding a pool to a PVE user
+type PveUserAddPool struct {
+	PoolID         string `json:"poolid"`
+	AssignIfExists bool   `json:"assign_if_exists"`
+}
+
+// FaeSecrets represents the response for generating AES keys
+type FaeSecrets struct {
+	AES string `json:"aes"`
+	JWT string `json:"jwt"`
+}
+
+// FaeAuthTokenRequest represents the request for generating FAE auth tokens
+type FaeAuthTokenRequest struct {
+	App   string        `json:"app"`
+	Roles []interface{} `json:"roles"`
+}
+
+// FaeAuthToken represents the response for FAE auth token generation
+type FaeAuthToken struct {
+	Token string `json:"token"`
 }
 
 // VmStatus represents the detailed VM status from Proxmox API
@@ -166,8 +152,8 @@ func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 }
 
 // Ping calls the /ping endpoint to check API connectivity
-func (c *Client) Ping() (*PingResponse, error) {
-	var pingResp PingResponse
+func (c *Client) Ping() (*vmagent.PingResponse, error) {
+	var pingResp vmagent.PingResponse
 
 	resp, err := c.restyClient.R().
 		SetResult(&pingResp).
@@ -222,8 +208,8 @@ func (c *Client) GetUser(username string) (*PveUser, error) {
 }
 
 // GetUserPools retrieves the pools and resources available to a PVE user
-func (c *Client) GetUserPools(username string) (*PveUserResources, error) {
-	var resources PveUserResources
+func (c *Client) GetUserPools(username string) (*vmagent.PveUserResources, error) {
+	var resources vmagent.PveUserResources
 
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
@@ -239,6 +225,24 @@ func (c *Client) GetUserPools(username string) (*PveUserResources, error) {
 	}
 
 	return &resources, nil
+}
+
+// AddPoolToUser adds a pool to a PVE user
+func (c *Client) AddPoolToUser(username string, poolReq *PveUserAddPool) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetBody(poolReq).
+		Post("/fae/v1/pveuser/pool")
+
+	if err != nil {
+		return fmt.Errorf("failed to add pool to user: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("add pool to user request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
 }
 
 // GetNodes retrieves the list of available nodes
@@ -299,8 +303,8 @@ func (c *Client) GetVMNextID() (*NextID, error) {
 }
 
 // GetUserVMs retrieves VMs for a specific user
-func (c *Client) GetUserVMs(username string) ([]Vm, error) {
-	var vms []Vm
+func (c *Client) GetUserVMs(username string) ([]vmagent.Vm, error) {
+	var vms []vmagent.Vm
 
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
@@ -319,7 +323,7 @@ func (c *Client) GetUserVMs(username string) ([]Vm, error) {
 }
 
 // CreateVM creates a new virtual machine
-func (c *Client) CreateVM(username string, vmReq *VmCreation) error {
+func (c *Client) CreateVM(username string, vmReq *vmagent.VmCreation) error {
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
 		SetBody(vmReq).
@@ -337,8 +341,8 @@ func (c *Client) CreateVM(username string, vmReq *VmCreation) error {
 }
 
 // GetVM retrieves a specific VM by ID
-func (c *Client) GetVM(username string, vmid int) (*Vm, error) {
-	var vm Vm
+func (c *Client) GetVM(username string, vmid int) (*vmagent.Vm, error) {
+	var vm vmagent.Vm
 
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
@@ -354,6 +358,24 @@ func (c *Client) GetVM(username string, vmid int) (*Vm, error) {
 	}
 
 	return &vm, nil
+}
+
+// PatchVM patches a virtual machine configuration
+func (c *Client) PatchVM(username string, vmid int, patchReq *vmagent.VmPatch) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetBody(patchReq).
+		Patch(fmt.Sprintf("/fae/v1/vms/%d", vmid))
+
+	if err != nil {
+		return fmt.Errorf("failed to patch VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("patch VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
 }
 
 // DeleteVM deletes a virtual machine
@@ -408,7 +430,7 @@ func (c *Client) StopVM(username string, vmid int) error {
 }
 
 // CloneVM clones a virtual machine
-func (c *Client) CloneVM(username string, vmid int, cloneReq *VmClonation) error {
+func (c *Client) CloneVM(username string, vmid int, cloneReq *VmClone) error {
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
 		SetBody(cloneReq).
@@ -426,7 +448,7 @@ func (c *Client) CloneVM(username string, vmid int, cloneReq *VmClonation) error
 }
 
 // MigrateVM migrates a virtual machine to another node
-func (c *Client) MigrateVM(username string, vmid int, migrateReq *VmMigration) error {
+func (c *Client) MigrateVM(username string, vmid int, migrateReq *VmMigrate) error {
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
 		SetBody(migrateReq).
@@ -482,4 +504,94 @@ func (c *Client) GetVMStatus(pveAuth string, node string, vmid int) (*VmStatus, 
 	}
 
 	return &status, nil
+}
+
+// GenerateSecrets generates AES and JWT secrets
+func (c *Client) GenerateSecrets() (*FaeSecrets, error) {
+	var secrets FaeSecrets
+
+	resp, err := c.restyClient.R().
+		SetResult(&secrets).
+		Get("/root/misc/generate-secrets")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate secrets: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("generate secrets request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &secrets, nil
+}
+
+// GenerateFaeAuthToken generates a new FAE auth token
+func (c *Client) GenerateFaeAuthToken(tokenReq *FaeAuthTokenRequest) (*FaeAuthToken, error) {
+	var token FaeAuthToken
+
+	resp, err := c.restyClient.R().
+		SetBody(tokenReq).
+		SetResult(&token).
+		Post("/root/fae-auth-token/generate")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate FAE auth token: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("generate FAE auth token request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &token, nil
+}
+
+// GetValidFaeAuthTokenApps gets the list of valid FAE auth token apps
+func (c *Client) GetValidFaeAuthTokenApps() ([]string, error) {
+	var apps []string
+
+	resp, err := c.restyClient.R().
+		SetResult(&apps).
+		Get("/root/fae-auth-token/apps")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get valid FAE auth token apps: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get valid FAE auth token apps request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return apps, nil
+}
+
+// AddFaeAuthTokenApp adds a new FAE auth token app
+func (c *Client) AddFaeAuthTokenApp(app string) error {
+	resp, err := c.restyClient.R().
+		Post(fmt.Sprintf("/root/fae-auth-token/apps/%s", app))
+
+	if err != nil {
+		return fmt.Errorf("failed to add FAE auth token app: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("add FAE auth token app request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// RemoveFaeAuthTokenApp removes a FAE auth token app
+func (c *Client) RemoveFaeAuthTokenApp(app string) error {
+	resp, err := c.restyClient.R().
+		Delete(fmt.Sprintf("/root/fae-auth-token/apps/%s", app))
+
+	if err != nil {
+		return fmt.Errorf("failed to remove FAE auth token app: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("remove FAE auth token app request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
 }

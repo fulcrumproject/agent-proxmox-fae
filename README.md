@@ -67,6 +67,10 @@ Configuration can also be provided or overridden using environment variables. Th
 - `PROXMOX_AGENT_JOB_POLL_INTERVAL`: How often to poll for jobs
 - `PROXMOX_AGENT_METRIC_REPORT_INTERVAL`: How often to report metrics
 
+### Proxmox API Configuration
+
+Proxmox API connection parameters (API token, URL, timeout, etc.) are automatically provided by Fulcrum Core during the agent connection phase. These parameters do not need to be configured in the agent configuration file or environment variables.
+
 ## Virtual Machine Lifecycle
 
 The agent manages VM lifecycle operations through the Proxmox API with the following state machine:
@@ -116,8 +120,6 @@ The Proxmox agent collects and reports the following metrics from Proxmox VMs:
 
 - `vm.cpu.usage`: CPU usage percentage from Proxmox VM statistics
 - `vm.memory.usage`: Memory usage percentage from Proxmox VM statistics
-- `vm.disk.usage`: Disk usage and I/O statistics from Proxmox
-- `vm.network.usage`: Network traffic statistics from Proxmox
 
 All metrics are collected directly from the Proxmox API and reflect real VM resource consumption. The agent reports these metrics at the configured interval for all managed VMs.
 
@@ -126,8 +128,7 @@ All metrics are collected directly from the Proxmox API and reflect real VM reso
 The Proxmox agent can process the following job types from Fulcrum Core:
 
 - `ServiceCreate`: Creates a new VM on the Proxmox cluster
-- `ServiceColdUpdate`: Updates a VM configuration when stopped
-- `ServiceHotUpdate`: Updates a VM configuration while running (if supported)
+- `ServiceUpdate`: Updates a VM configuration when stopped (hot-update is not supported)
 - `ServiceStart`: Starts a VM on the Proxmox cluster
 - `ServiceStop`: Stops a VM on the Proxmox cluster
 - `ServiceDelete`: Removes a VM from the Proxmox cluster
@@ -207,12 +208,57 @@ If VM operations are failing:
 
 ## Development and Testing
 
-The Proxmox agent includes comprehensive unit tests:
+The Proxmox agent includes comprehensive unit tests and integration tests:
+
+### Unit Tests
 
 ```bash
 # Run all tests
 go test ./...
 
 # Run specific tests
-go test -v ./internal/handlers
+go test -v ./internal/vmagent
 ```
+
+### Integration Tests
+
+Integration tests require a running Proxmox API server for testing real API interactions.
+
+#### Setup
+
+1. Copy the example environment file:
+   ```bash
+   cp .env_proxmoxapi.test.example .env_proxmoxapi.test
+   ```
+
+2. Edit `.env_proxmoxapi.test` with your Proxmox API connection details:
+   ```bash
+   # Proxmox API Connection for testing
+   PROXMOX_AGENT_PROXMOX_API_URL=https://your-proxmox-server:8006/api2/json
+   PROXMOX_AGENT_PROXMOX_API_TOKEN=PROXMOX-SECRET-TOKEN
+   PROXMOX_AGENT_PROXMOX_API_INSECURE_SKIP_TLS=false
+   PROXMOX_AGENT_PROXMOX_API_TIMEOUT=30s
+   PROXMOX_AGENT_PROXMOX_API_DEBUG=false
+   ```
+   
+   **Important:** The `.env_proxmoxapi.test` file is ignored by git and should not be committed as it contains sensitive credentials.
+
+#### Running Integration Tests
+
+```bash
+# Run integration tests
+INTEGRATION_TESTS=1 go test -v ./internal/proxmoxapi
+
+# Run all tests including integration tests
+INTEGRATION_TESTS=1 go test ./...
+```
+
+**Note:** Integration tests are skipped by default. Set `INTEGRATION_TESTS=1` to enable them.
+
+#### What Integration Tests Cover
+
+The integration tests verify real Proxmox API interactions including:
+- API connectivity and authentication
+- VM lifecycle operations (create, start, stop, delete)
+- Resource queries and status monitoring
+- Error handling for invalid operations

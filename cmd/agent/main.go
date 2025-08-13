@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"fulcrumproject.org/agent-proxmox-wrapped/internal/config"
-	"fulcrumproject.org/agent-proxmox-wrapped/internal/handlers"
-	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
 	"github.com/fulcrumproject/agent-lib-go/pkg/fulcrumcli"
 	"github.com/fulcrumproject/agent-lib-go/pkg/stdagent"
+	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/proxmoxapi"
+	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent"
 	"github.com/fulcrumproject/utils/confbuilder"
 	"github.com/fulcrumproject/utils/logging"
 )
@@ -38,12 +38,20 @@ func main() {
 	logger := logging.NewLogger(&cfg.LogConfig)
 	slog.SetDefault(logger)
 
-	slog.Info("Starting test agent")
-
-	client := fulcrumcli.NewHTTPClient[handlers.ServiceProperties](cfg.FulcrumAPIURL, cfg.AgentToken)
+	slog.Info("Starting proxmox agent")
 
 	// Create stdagent with configuration options
-	testAgent := newAgent(client, cfg.JobPollInterval, cfg.MetricReportInterval)
+	fulcrumClient := fulcrumcli.NewHTTPClient(cfg.FulcrumAPIURL, cfg.AgentToken)
+	proxmoxClientFactory := func(config *config.ProxmoxAPIConfig) vmagent.ProxmoxClient {
+		return proxmoxapi.NewClient(config)
+	}
+	vmAgent := vmagent.NewVMAgent(
+		proxmoxClientFactory,
+		fulcrumClient,
+		stdagent.WithHealthInterval(60*time.Second),
+		stdagent.WithJobPollInterval(cfg.JobPollInterval),
+		stdagent.WithMetricsReportInterval(cfg.MetricReportInterval),
+	)
 
 	// Handle graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -54,12 +62,12 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start the agent
-	if err := testAgent.Run(ctx); err != nil {
+	if err := vmAgent.Run(ctx); err != nil {
 		slog.Error("Failed to start agent", "error", err)
 		os.Exit(1)
 	}
 
-	slog.Info("Test agent started successfully", "agent_id", testAgent.GetAgentID())
+	slog.Info("Proxmox agent started successfully", "agent_id", vmAgent.GetAgentID())
 
 	// Wait for termination signal
 	<-sigCh
@@ -70,40 +78,9 @@ func main() {
 	defer shutdownCancel()
 
 	// Shut down the agent
-	if err := testAgent.Shutdown(shutdownCtx); err != nil {
+	if err := vmAgent.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Error during shutdown", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("Agent uptime", "uptime", testAgent.GetUptime().Round(time.Second))
-}
-
-func newAgent(
-	client *fulcrumcli.HTTPClient[handlers.ServiceProperties],
-	jobPollInterval time.Duration,
-	metricReportInterval time.Duration,
-) *stdagent.Agent[handlers.ServiceProperties, handlers.JobResources] {
-	testAgent, err := stdagent.New(client,
-		stdagent.WithHeartbeatInterval[handlers.ServiceProperties, handlers.JobResources](60*time.Second),
-		stdagent.WithJobPollInterval[handlers.ServiceProperties, handlers.JobResources](jobPollInterval),
-		stdagent.WithMetricsReportInterval[handlers.ServiceProperties, handlers.JobResources](metricReportInterval),
-	)
-	if err != nil {
-		slog.Error("Failed to create agent", "error", err)
-		os.Exit(1)
-	}
-
-	// Register heartbeat handler (with VM resource updating)
-	testAgent.OnHeartbeat(handlers.HeartbeatHandler())
-
-	// Register job handlers
-	testAgent.OnJob(agent.JobActionServiceCreate, handlers.CreateVMHandler())
-	testAgent.OnJob(agent.JobActionServiceColdUpdate, handlers.UpdateVMHandler())
-	testAgent.OnJob(agent.JobActionServiceHotUpdate, handlers.UpdateVMHandler())
-	testAgent.OnJob(agent.JobActionServiceStart, handlers.StartVMHandler())
-	testAgent.OnJob(agent.JobActionServiceStop, handlers.StopVMHandler())
-	testAgent.OnJob(agent.JobActionServiceDelete, handlers.DeleteVMHandler())
-
-	// Register metrics reporter
-	testAgent.OnMetricsReport(handlers.MetricsReporter())
-	return testAgent
+	slog.Info("Agent uptime", "uptime", vmAgent.GetUptime().Round(time.Second))
 }

@@ -1,0 +1,18 @@
+all: false
+template: testify
+filename: mocks_test.go
+packages:
+  github.com/fulcrumproject/agent-lib-go/pkg/stdagent:
+    config:
+      dir: internal/vmagent
+      pkgname: vmagent
+      filename: mock_fulcrum_client_test.go
+    interfaces:
+      FulcrumClient: {}
+  github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent:
+    config:
+      filename: mock_proxmox_client_test.go
+      dir: internal/vmagent
+      pkgname: vmagent
+    interfaces:
+      ProxmoxClient: {}

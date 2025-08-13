@@ -22,9 +22,16 @@ type Config struct {
 
 	// Logging
 	LogConfig logging.Conf `json:"log" validate:"required"`
+}
 
-	// ProxmoxAPI API configuration
-	ProxmoxAPI ProxmoxAPIConfig `json:"proxmox" validate:"required" env:"PROXMOX_API"`
+// DefaultConfig returns the default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		AgentToken:           "", // Must be provided
+		FulcrumAPIURL:        "http://localhost:3000",
+		JobPollInterval:      5 * time.Second,
+		MetricReportInterval: 30 * time.Second,
+	}
 }
 
 // ProxmoxAPIConfig holds the configuration for Proxmox API connection
@@ -36,19 +43,13 @@ type ProxmoxAPIConfig struct {
 	Debug           bool          `json:"debug" env:"DEBUG"`                        // Enable debug logging for HTTP requests
 }
 
-// DefaultConfig returns the default configuration
-func DefaultConfig() *Config {
-	return &Config{
-		AgentToken:           "", // Must be provided
-		FulcrumAPIURL:        "http://localhost:3000",
-		JobPollInterval:      5 * time.Second,
-		MetricReportInterval: 30 * time.Second,
-		ProxmoxAPI: ProxmoxAPIConfig{
-			APIToken:        "", // Must be provided
-			APIURL:          "", // Must be provided
-			InsecureSkipTLS: false,
-			Timeout:         30 * time.Second,
-			Debug:           false,
-		},
+// DefaultProxmoxAPIConfig returns the default configuration for Proxmox API
+func DefaultProxmoxAPIConfig() *ProxmoxAPIConfig {
+	return &ProxmoxAPIConfig{
+		APIToken:        "", // Must be provided
+		APIURL:          "", // Must be provided
+		InsecureSkipTLS: false,
+		Timeout:         30 * time.Second,
+		Debug:           false,
 	}
 }

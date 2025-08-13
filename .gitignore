@@ -3,6 +3,7 @@ __debug**
 /tmp
 .env
 .env.local
+.env_proxmoxapi.test
 .DS_Store
 coverage.out
 testagent
