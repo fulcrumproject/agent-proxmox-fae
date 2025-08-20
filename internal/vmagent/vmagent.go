@@ -15,6 +15,19 @@ type RemoteConfig struct {
 	ProxmoxAPI *config.ProxmoxAPIConfig `json:"proxmoxAPI"`
 }
 
+// VMProperties represents the properties of a VM service
+type VMProperties struct {
+	CPU    int    `json:"cpu"`
+	Memory int    `json:"memory"`
+	Disk   int    `json:"disk"`
+	Image  string `json:"image"`
+}
+
+// VMResources represents the resources in a job response
+type VMResources struct {
+	VMID int `json:"vmid"`
+}
+
 type VMAgent struct {
 	stdAgent             *stdagent.Agent
 	proxmoxClient        ProxmoxClient

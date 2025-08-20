@@ -2,6 +2,7 @@ package vmagent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -27,10 +28,20 @@ func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, image
 	})
 }
 
+// Helper function to create raw params from VMProperties
+func rawParamsPtr(props VMProperties) *json.RawMessage {
+	data, err := json.Marshal(props)
+	if err != nil {
+		panic(err) // This should never happen in tests
+	}
+	raw := json.RawMessage(data)
+	return &raw
+}
+
 func TestExtractUserAndVMID(t *testing.T) {
 	tests := []struct {
 		name         string
-		service      *agent.Service
+		service      *agent.RawService
 		expectError  bool
 		errorMsg     string
 		expectedUser string
@@ -38,11 +49,9 @@ func TestExtractUserAndVMID(t *testing.T) {
 	}{
 		{
 			name: "successful_extraction",
-			service: &agent.Service{
+			service: &agent.RawService{
 				ConsumerID: "testuser",
-				Resources: map[string]interface{}{
-					"vmid": 123,
-				},
+				Resources:  rawResourcesPtr(`{"vmid": 123}`),
 			},
 			expectError:  false,
 			expectedUser: "testuser",
@@ -56,7 +65,7 @@ func TestExtractUserAndVMID(t *testing.T) {
 		},
 		{
 			name: "service_resources_is_nil",
-			service: &agent.Service{
+			service: &agent.RawService{
 				ConsumerID: "testuser",
 				Resources:  nil,
 			},
@@ -64,24 +73,13 @@ func TestExtractUserAndVMID(t *testing.T) {
 			errorMsg:    "job service resources are nil",
 		},
 		{
-			name: "vmid_not_found",
-			service: &agent.Service{
+			name: "invalid_json_resources",
+			service: &agent.RawService{
 				ConsumerID: "testuser",
-				Resources:  map[string]interface{}{},
+				Resources:  rawResourcesPtr(`invalid json`),
 			},
 			expectError: true,
-			errorMsg:    "vmid not found in job service resources",
-		},
-		{
-			name: "vmid_wrong_type",
-			service: &agent.Service{
-				ConsumerID: "testuser",
-				Resources: map[string]interface{}{
-					"vmid": "not-an-int",
-				},
-			},
-			expectError: true,
-			errorMsg:    "vmid is not an integer",
+			errorMsg:    "failed to unmarshal service resources",
 		},
 	}
 
@@ -120,25 +118,25 @@ func TestVMAgent_NewJobResponse(t *testing.T) {
 func TestVMAgent_CreateVMHandler(t *testing.T) {
 	tests := []struct {
 		name        string
-		job         *agent.Job[VMServiceProperties]
+		job         *agent.RawJob
 		setupMock   func(*MockProxmoxClient)
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "successful_vm_creation",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-1",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-				},
-				Params: &VMServiceProperties{
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    2,
 					Memory: 1024,
 					Disk:   20,
 					Image:  "debian-12-standard.iso",
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				userResources := &PveUserResources{
@@ -154,39 +152,45 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 		},
 		{
 			name: "get_user_pools_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-2",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-				},
-				Params: &VMServiceProperties{
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    1,
 					Memory: 512,
 					Disk:   10,
 					Image:  "alpine.iso",
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().GetUserPools("testuser").Return(nil, errors.New("user not found")).Once()
+				// Expect CreateUser call since GetUserPools fails
+				mockClient.EXPECT().CreateUser(&PveUserCreation{
+					UserID:        "testuser",
+					PoolID:        "testuser",
+					ResetIfExists: false,
+				}).Return(errors.New("failed to create user")).Once()
 			},
 			expectError: true,
-			errorMsg:    "failed to get user resources",
+			errorMsg:    "failed to create user",
 		},
 		{
 			name: "no_nodes_available",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-3",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-				},
-				Params: &VMServiceProperties{
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    1,
 					Memory: 512,
 					Disk:   10,
 					Image:  "alpine.iso",
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				userResources := &PveUserResources{
@@ -201,18 +205,18 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 		},
 		{
 			name: "no_pools_available",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-4",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-				},
-				Params: &VMServiceProperties{
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    1,
 					Memory: 512,
 					Disk:   10,
 					Image:  "alpine.iso",
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				userResources := &PveUserResources{
@@ -227,18 +231,18 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 		},
 		{
 			name: "create_vm_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-5",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-				},
-				Params: &VMServiceProperties{
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    1,
 					Memory: 512,
 					Disk:   10,
 					Image:  "alpine.iso",
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				userResources := &PveUserResources{
@@ -265,27 +269,32 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				proxmoxClient: mockClient,
 			}
 
-			// Get the create VM handler
-			createHandler := vmAgent.CreateVMHandler()
-			require.NotNil(t, createHandler, "CreateVMHandler should return a non-nil function")
+			// Get the create VM handler and wrap it
+			typedHandler := vmAgent.CreateVMHandler()
+			require.NotNil(t, typedHandler, "CreateVMHandler should return a non-nil function")
+			wrappedHandler := agent.JobHandlerWrapper(typedHandler)
 
-			// Execute the create VM handler
+			// Execute the wrapped handler
 			ctx := context.Background()
-			response, err := createHandler(ctx, tt.job)
+			rawResponse, err := wrappedHandler(ctx, tt.job)
 
 			// Verify expectations
 			if tt.expectError {
 				require.Error(t, err, "Expected create VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
-				assert.Nil(t, response, "Response should be nil when error occurs")
+				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 			} else {
 				require.NoError(t, err, "Expected create VM handler to succeed")
-				require.NotNil(t, response, "Response should not be nil")
-				require.NotNil(t, response.Resources, "Response resources should not be nil")
-				require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse, "Response should not be nil")
+				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
+				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
 
-				assert.Equal(t, 100, response.Resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "100", *response.ExternalID, "External ID should match VMID as string")
+				// Parse the resources to verify VMID
+				var resources VMResources
+				err := json.Unmarshal(*rawResponse.Resources, &resources)
+				require.NoError(t, err, "Should be able to unmarshal resources")
+				assert.Equal(t, 100, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, "100", *rawResponse.ExternalID, "External ID should match VMID as string")
 			}
 		})
 	}
@@ -294,7 +303,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 func TestVMAgent_UpdateVMHandler(t *testing.T) {
 	tests := []struct {
 		name          string
-		job           *agent.Job[VMServiceProperties]
+		job           *agent.RawJob
 		setupMock     func(*MockProxmoxClient)
 		expectError   bool
 		errorMsg      string
@@ -302,20 +311,18 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 	}{
 		{
 			name: "successful_vm_update",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-1",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
 					Status:     agent.ServiceStatusStopped,
-					Resources: map[string]interface{}{
-						"vmid": 200,
-					},
-				},
-				Params: &VMServiceProperties{
+					Resources:  rawResourcesPtr(`{"vmid": 200}`),
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    4,
 					Memory: 2048,
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM("testuser", 200, &VmPatch{
@@ -327,20 +334,18 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 		},
 		{
 			name: "vm_not_stopped",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-2",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
 					Status:     "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
-					Resources: map[string]interface{}{
-						"vmid": 201,
-					},
-				},
-				Params: &VMServiceProperties{
+					Resources:  rawResourcesPtr(`{"vmid": 201}`),
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    2,
 					Memory: 1024,
-				},
+				}),
 			},
 			setupMock:     func(mockClient *MockProxmoxClient) {}, // No mock calls expected
 			expectError:   true,
@@ -349,39 +354,37 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 		},
 		{
 			name: "extract_vmid_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-3",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
 					Status:     agent.ServiceStatusStopped,
-					Resources:  map[string]interface{}{}, // Missing vmid
-				},
-				Params: &VMServiceProperties{
+					Resources:  rawResourcesPtr(`{}`), // Missing vmid
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    2,
 					Memory: 1024,
-				},
+				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
 			expectError: true,
-			errorMsg:    "failed to extract VMID",
+			errorMsg:    "vmid is missing or zero",
 		},
 		{
 			name: "patch_vm_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-4",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
 					Status:     agent.ServiceStatusStopped,
-					Resources: map[string]interface{}{
-						"vmid": 202,
-					},
-				},
-				Params: &VMServiceProperties{
+					Resources:  rawResourcesPtr(`{"vmid": 202}`),
+				}),
+				Params: rawParamsPtr(VMProperties{
 					CPU:    8,
 					Memory: 4096,
-				},
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM("testuser", 202, &VmPatch{
@@ -405,19 +408,20 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				proxmoxClient: mockClient,
 			}
 
-			// Get the update VM handler
-			updateHandler := vmAgent.UpdateVMHandler()
-			require.NotNil(t, updateHandler, "UpdateVMHandler should return a non-nil function")
+			// Get the update VM handler and wrap it
+			typedHandler := vmAgent.UpdateVMHandler()
+			require.NotNil(t, typedHandler, "UpdateVMHandler should return a non-nil function")
+			wrappedHandler := agent.JobHandlerWrapper(typedHandler)
 
-			// Execute the update VM handler
+			// Execute the wrapped handler
 			ctx := context.Background()
-			response, err := updateHandler(ctx, tt.job)
+			rawResponse, err := wrappedHandler(ctx, tt.job)
 
 			// Verify expectations
 			if tt.expectError {
 				require.Error(t, err, "Expected update VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
-				assert.Nil(t, response, "Response should be nil when error occurs")
+				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 
 				if tt.isUnsupported {
 					var unsupportedErr *agent.UnsupportedJobError
@@ -425,12 +429,16 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err, "Expected update VM handler to succeed")
-				require.NotNil(t, response, "Response should not be nil")
-				require.NotNil(t, response.Resources, "Response resources should not be nil")
-				require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse, "Response should not be nil")
+				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
+				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
 
-				assert.Equal(t, 200, response.Resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "200", *response.ExternalID, "External ID should match VMID as string")
+				// Parse the resources to verify VMID
+				var resources VMResources
+				err := json.Unmarshal(*rawResponse.Resources, &resources)
+				require.NoError(t, err, "Should be able to unmarshal resources")
+				assert.Equal(t, 200, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, "200", *rawResponse.ExternalID, "External ID should match VMID as string")
 			}
 		})
 	}
@@ -439,22 +447,20 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 func TestVMAgent_StartVMHandler(t *testing.T) {
 	tests := []struct {
 		name        string
-		job         *agent.Job[VMServiceProperties]
+		job         *agent.RawJob
 		setupMock   func(*MockProxmoxClient)
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "successful_vm_start",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-1",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 300,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 300}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().StartVM("testuser", 300).Return(nil).Once()
@@ -463,29 +469,27 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 		},
 		{
 			name: "extract_vmid_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-2",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
 					Resources:  nil, // Missing resources
-				},
+				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
 			expectError: true,
-			errorMsg:    "failed to extract VMID",
+			errorMsg:    "vmid is missing or zero",
 		},
 		{
 			name: "start_vm_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-3",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 301,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 301}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().StartVM("testuser", 301).Return(errors.New("VM is already running")).Once()
@@ -506,27 +510,32 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 				proxmoxClient: mockClient,
 			}
 
-			// Get the start VM handler
-			startHandler := vmAgent.StartVMHandler()
-			require.NotNil(t, startHandler, "StartVMHandler should return a non-nil function")
+			// Get the start VM handler and wrap it
+			typedHandler := vmAgent.StartVMHandler()
+			require.NotNil(t, typedHandler, "StartVMHandler should return a non-nil function")
+			wrappedHandler := agent.JobHandlerWrapper(typedHandler)
 
-			// Execute the start VM handler
+			// Execute the wrapped handler
 			ctx := context.Background()
-			response, err := startHandler(ctx, tt.job)
+			rawResponse, err := wrappedHandler(ctx, tt.job)
 
 			// Verify expectations
 			if tt.expectError {
 				require.Error(t, err, "Expected start VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
-				assert.Nil(t, response, "Response should be nil when error occurs")
+				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 			} else {
 				require.NoError(t, err, "Expected start VM handler to succeed")
-				require.NotNil(t, response, "Response should not be nil")
-				require.NotNil(t, response.Resources, "Response resources should not be nil")
-				require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse, "Response should not be nil")
+				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
+				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
 
-				assert.Equal(t, 300, response.Resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "300", *response.ExternalID, "External ID should match VMID as string")
+				// Parse the resources to verify VMID
+				var resources VMResources
+				err := json.Unmarshal(*rawResponse.Resources, &resources)
+				require.NoError(t, err, "Should be able to unmarshal resources")
+				assert.Equal(t, 300, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, "300", *rawResponse.ExternalID, "External ID should match VMID as string")
 			}
 		})
 	}
@@ -535,22 +544,20 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 func TestVMAgent_StopVMHandler(t *testing.T) {
 	tests := []struct {
 		name        string
-		job         *agent.Job[VMServiceProperties]
+		job         *agent.RawJob
 		setupMock   func(*MockProxmoxClient)
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "successful_vm_stop",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-1",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 400,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 400}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().StopVM("testuser", 400).Return(nil).Once()
@@ -559,31 +566,27 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 		},
 		{
 			name: "extract_vmid_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-2",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": "invalid", // Wrong type
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": "invalid"}`), // Wrong type
+				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
 			expectError: true,
-			errorMsg:    "failed to extract VMID",
+			errorMsg:    "json: cannot unmarshal string into Go struct field VMResources.vmid of type int",
 		},
 		{
 			name: "stop_vm_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-3",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 401,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 401}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().StopVM("testuser", 401).Return(errors.New("VM is already stopped")).Once()
@@ -604,27 +607,32 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 				proxmoxClient: mockClient,
 			}
 
-			// Get the stop VM handler
-			stopHandler := vmAgent.StopVMHandler()
-			require.NotNil(t, stopHandler, "StopVMHandler should return a non-nil function")
+			// Get the stop VM handler and wrap it
+			typedHandler := vmAgent.StopVMHandler()
+			require.NotNil(t, typedHandler, "StopVMHandler should return a non-nil function")
+			wrappedHandler := agent.JobHandlerWrapper(typedHandler)
 
-			// Execute the stop VM handler
+			// Execute the wrapped handler
 			ctx := context.Background()
-			response, err := stopHandler(ctx, tt.job)
+			rawResponse, err := wrappedHandler(ctx, tt.job)
 
 			// Verify expectations
 			if tt.expectError {
 				require.Error(t, err, "Expected stop VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
-				assert.Nil(t, response, "Response should be nil when error occurs")
+				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 			} else {
 				require.NoError(t, err, "Expected stop VM handler to succeed")
-				require.NotNil(t, response, "Response should not be nil")
-				require.NotNil(t, response.Resources, "Response resources should not be nil")
-				require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse, "Response should not be nil")
+				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
+				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
 
-				assert.Equal(t, 400, response.Resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "400", *response.ExternalID, "External ID should match VMID as string")
+				// Parse the resources to verify VMID
+				var resources VMResources
+				err := json.Unmarshal(*rawResponse.Resources, &resources)
+				require.NoError(t, err, "Should be able to unmarshal resources")
+				assert.Equal(t, 400, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, "400", *rawResponse.ExternalID, "External ID should match VMID as string")
 			}
 		})
 	}
@@ -633,22 +641,20 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 func TestVMAgent_DeleteVMHandler(t *testing.T) {
 	tests := []struct {
 		name        string
-		job         *agent.Job[VMServiceProperties]
+		job         *agent.RawJob
 		setupMock   func(*MockProxmoxClient)
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "successful_vm_delete",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-1",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 500,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 500}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().DeleteVM("testuser", 500).Return(nil).Once()
@@ -657,29 +663,27 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 		},
 		{
 			name: "extract_vmid_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-2",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources:  map[string]interface{}{}, // Missing vmid
-				},
+					Resources:  rawResourcesPtr(`{}`), // Missing vmid
+				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
 			expectError: true,
-			errorMsg:    "failed to extract VMID",
+			errorMsg:    "vmid is missing or zero",
 		},
 		{
 			name: "delete_vm_fails",
-			job: &agent.Job[VMServiceProperties]{
+			job: &agent.RawJob{
 				ID: "test-job-3",
-				Service: &agent.Service{
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
 					ConsumerID: "testuser",
 					Name:       "test-vm",
-					Resources: map[string]interface{}{
-						"vmid": 501,
-					},
-				},
+					Resources:  rawResourcesPtr(`{"vmid": 501}`),
+				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().DeleteVM("testuser", 501).Return(errors.New("VM has snapshots")).Once()
@@ -700,27 +704,32 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 				proxmoxClient: mockClient,
 			}
 
-			// Get the delete VM handler
-			deleteHandler := vmAgent.DeleteVMHandler()
-			require.NotNil(t, deleteHandler, "DeleteVMHandler should return a non-nil function")
+			// Get the delete VM handler and wrap it
+			typedHandler := vmAgent.DeleteVMHandler()
+			require.NotNil(t, typedHandler, "DeleteVMHandler should return a non-nil function")
+			wrappedHandler := agent.JobHandlerWrapper(typedHandler)
 
-			// Execute the delete VM handler
+			// Execute the wrapped handler
 			ctx := context.Background()
-			response, err := deleteHandler(ctx, tt.job)
+			rawResponse, err := wrappedHandler(ctx, tt.job)
 
 			// Verify expectations
 			if tt.expectError {
 				require.Error(t, err, "Expected delete VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
-				assert.Nil(t, response, "Response should be nil when error occurs")
+				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 			} else {
 				require.NoError(t, err, "Expected delete VM handler to succeed")
-				require.NotNil(t, response, "Response should not be nil")
-				require.NotNil(t, response.Resources, "Response resources should not be nil")
-				require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse, "Response should not be nil")
+				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
+				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
 
-				assert.Equal(t, 500, response.Resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "500", *response.ExternalID, "External ID should match VMID as string")
+				// Parse the resources to verify VMID
+				var resources VMResources
+				err := json.Unmarshal(*rawResponse.Resources, &resources)
+				require.NoError(t, err, "Should be able to unmarshal resources")
+				assert.Equal(t, 500, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, "500", *rawResponse.ExternalID, "External ID should match VMID as string")
 			}
 		})
 	}

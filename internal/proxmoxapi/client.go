@@ -3,6 +3,7 @@ package proxmoxapi
 import (
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	"resty.dev/v3"
 
@@ -138,7 +139,7 @@ func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 		SetBaseURL(cfg.APIURL).
 		SetHeader("Authorization", cfg.APIToken).
 		SetHeader("Content-Type", "application/json").
-		SetTimeout(cfg.Timeout).
+		SetTimeout(time.Duration(cfg.Timeout) * time.Second).
 		SetDebug(cfg.Debug)
 
 	// Configure TLS settings
@@ -170,8 +171,20 @@ func (c *Client) Ping() (*vmagent.PingResponse, error) {
 	return &pingResp, nil
 }
 
-// CreateUser creates a new PVE user
-func (c *Client) CreateUser(req *PveUserCreation) error {
+// CreateUser creates a new PVE user (implements vmagent.ProxmoxClient interface)
+func (c *Client) CreateUser(req *vmagent.PveUserCreation) error {
+	// Convert vmagent type to proxmoxapi type
+	proxmoxReq := &PveUserCreation{
+		UserID:        req.UserID,
+		PoolID:        req.PoolID,
+		ResetIfExists: req.ResetIfExists,
+	}
+
+	return c.createPveUser(proxmoxReq)
+}
+
+// createPveUser is the internal implementation using proxmoxapi types
+func (c *Client) createPveUser(req *PveUserCreation) error {
 	resp, err := c.restyClient.R().
 		SetBody(req).
 		Post("/fae/v1/pveuser")

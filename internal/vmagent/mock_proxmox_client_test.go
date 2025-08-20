@@ -35,6 +35,57 @@ func (_m *MockProxmoxClient) EXPECT() *MockProxmoxClient_Expecter {
 	return &MockProxmoxClient_Expecter{mock: &_m.Mock}
 }
 
+// CreateUser provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) CreateUser(req *PveUserCreation) error {
+	ret := _mock.Called(req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateUser")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(*PveUserCreation) error); ok {
+		r0 = returnFunc(req)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProxmoxClient_CreateUser_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateUser'
+type MockProxmoxClient_CreateUser_Call struct {
+	*mock.Call
+}
+
+// CreateUser is a helper method to define mock.On call
+//   - req *PveUserCreation
+func (_e *MockProxmoxClient_Expecter) CreateUser(req interface{}) *MockProxmoxClient_CreateUser_Call {
+	return &MockProxmoxClient_CreateUser_Call{Call: _e.mock.On("CreateUser", req)}
+}
+
+func (_c *MockProxmoxClient_CreateUser_Call) Run(run func(req *PveUserCreation)) *MockProxmoxClient_CreateUser_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *PveUserCreation
+		if args[0] != nil {
+			arg0 = args[0].(*PveUserCreation)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_CreateUser_Call) Return(err error) *MockProxmoxClient_CreateUser_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_CreateUser_Call) RunAndReturn(run func(req *PveUserCreation) error) *MockProxmoxClient_CreateUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateVM provides a mock function for the type MockProxmoxClient
 func (_mock *MockProxmoxClient) CreateVM(username string, vmReq *VmCreation) error {
 	ret := _mock.Called(username, vmReq)

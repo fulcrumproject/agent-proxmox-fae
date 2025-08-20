@@ -61,7 +61,7 @@ func TestClientCreateAndGetUser(t *testing.T) {
 	}
 
 	// Create the user
-	err := client.CreateUser(userReq)
+	err := client.createPveUser(userReq)
 	if err != nil {
 		t.Logf("CreateUser returned error (may be expected): %v", err)
 		return // Skip the get test if create failed
@@ -129,7 +129,7 @@ func TestClientVMLifecycle(t *testing.T) {
 		ResetIfExists: false,
 	}
 
-	err := client.CreateUser(userReq)
+	err := client.createPveUser(userReq)
 	if err != nil {
 		t.Logf("CreateUser returned error (may be expected): %v", err)
 		return // Skip the rest of the test if user creation fails

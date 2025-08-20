@@ -8,18 +8,30 @@ import (
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
 )
 
-// MetricsReporter collects and returns metrics from VMs
-func (v *VMAgent) MetricsReporter() agent.MetricsReporter {
-	return func(ctx context.Context, service *agent.Service) ([]agent.MetricEntry, error) {
+// MetricsReporter returns a raw metrics reporter using the new generified wrapper
+func (v *VMAgent) MetricsReporter() agent.RawMetricsReporter {
+	return agent.MetricsReporterWrapper(v.typedMetricsReporter())
+}
+
+// typedMetricsReporter returns the typed metrics reporter that will be wrapped
+func (v *VMAgent) typedMetricsReporter() agent.MetricsReporter[VMProperties, VMResources] {
+	return func(ctx context.Context, service *agent.Service[VMProperties, VMResources]) ([]agent.MetricEntry, error) {
 		var metrics []agent.MetricEntry
 
 		if service == nil || service.ExternalID == nil {
 			return nil, fmt.Errorf("service is nil or externalID is nil")
 		}
 
-		username, vmid, err := extractUserAndVMID(service)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract user and VMID from service: %w", err)
+		if service.Resources == nil {
+			return nil, fmt.Errorf("job service resources are nil")
+		}
+
+		username := service.ConsumerID
+		vmid := service.Resources.VMID
+
+		// Validate VMID is provided
+		if vmid == 0 {
+			return nil, fmt.Errorf("vmid is missing or zero")
 		}
 
 		vm, err := v.proxmoxClient.GetVM(username, vmid)

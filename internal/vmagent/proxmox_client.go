@@ -6,6 +6,7 @@ type ProxmoxClient interface {
 	Ping() (*PingResponse, error)
 
 	// User and resource management
+	CreateUser(req *PveUserCreation) error
 	GetUserPools(username string) (*PveUserResources, error)
 
 	// VM management
@@ -21,6 +22,13 @@ type ProxmoxClient interface {
 type PingResponse struct {
 	Fae     bool `json:"fae"`
 	Proxmox bool `json:"proxmox"`
+}
+
+// PveUserCreation represents the request for creating a new PVE user
+type PveUserCreation struct {
+	UserID        string `json:"userid"`
+	PoolID        string `json:"poolid"`
+	ResetIfExists bool   `json:"reset_if_exists"`
 }
 
 // PveUserResources represents the resources available to a PVE user

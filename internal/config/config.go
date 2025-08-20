@@ -36,11 +36,11 @@ func DefaultConfig() *Config {
 
 // ProxmoxAPIConfig holds the configuration for Proxmox API connection
 type ProxmoxAPIConfig struct {
-	APIToken        string        `json:"apiToken" validate:"required" env:"TOKEN"` // Authentication token for Proxmox API
-	APIURL          string        `json:"apiUrl" validate:"required" env:"URL"`     // Base URL for Proxmox API
-	InsecureSkipTLS bool          `json:"insecureSkipTls" env:"INSECURE_SKIP_TLS"`  // Skip TLS certificate verification
-	Timeout         time.Duration `json:"timeout" env:"TIMEOUT"`                    // HTTP request timeout
-	Debug           bool          `json:"debug" env:"DEBUG"`                        // Enable debug logging for HTTP requests
+	APIToken        string `json:"apiToken" validate:"required" env:"TOKEN"` // Authentication token for Proxmox API
+	APIURL          string `json:"apiUrl" validate:"required" env:"URL"`     // Base URL for Proxmox API
+	InsecureSkipTLS bool   `json:"insecureSkipTls" env:"INSECURE_SKIP_TLS"`  // Skip TLS certificate verification
+	Timeout         int    `json:"timeout" env:"TIMEOUT"`                    // HTTP request timeout in seconds
+	Debug           bool   `json:"debug" env:"DEBUG"`                        // Enable debug logging for HTTP requests
 }
 
 // DefaultProxmoxAPIConfig returns the default configuration for Proxmox API
@@ -49,7 +49,7 @@ func DefaultProxmoxAPIConfig() *ProxmoxAPIConfig {
 		APIToken:        "", // Must be provided
 		APIURL:          "", // Must be provided
 		InsecureSkipTLS: false,
-		Timeout:         30 * time.Second,
+		Timeout:         30,
 		Debug:           false,
 	}
 }

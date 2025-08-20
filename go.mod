@@ -3,7 +3,7 @@ module github.com/fulcrumproject/agent-proxmox-wrapped
 go 1.24.5
 
 require (
-	github.com/fulcrumproject/agent-lib-go v0.0.0-20250807095647-df0ea9f9ac32
+	github.com/fulcrumproject/agent-lib-go v0.0.0-20250820145221-b3dab635ef83
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.10.0
 	resty.dev/v3 v3.0.0-beta.3
@@ -31,5 +31,3 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )
-
-replace github.com/fulcrumproject/agent-lib-go => ../agent-lib-go

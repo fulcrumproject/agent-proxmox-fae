@@ -1,5 +1,9 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/fulcrumproject/agent-lib-go v0.0.0-20250813150956-c7b638ba1d4d h1:qI1AlTQxhCKZRTi9SpOAla+0+zwNWmvRMKwpGc8lTKA=
+github.com/fulcrumproject/agent-lib-go v0.0.0-20250813150956-c7b638ba1d4d/go.mod h1:/KLOUDVQRwvEeS1xT1/Nrlse3eJ2FcznW2ffcrs6JlY=
+github.com/fulcrumproject/agent-lib-go v0.0.0-20250820145221-b3dab635ef83 h1:3D592HRhWS37ivFCgjYQvTFH9aNNF4MnTCzk/Gvm3F4=
+github.com/fulcrumproject/agent-lib-go v0.0.0-20250820145221-b3dab635ef83/go.mod h1:/KLOUDVQRwvEeS1xT1/Nrlse3eJ2FcznW2ffcrs6JlY=
 github.com/fulcrumproject/utils v0.0.0-20250716134607-ea1fe63b7dd8 h1:8rMfi6HxGHttKWa2L1Bywzp5Zcd1k4rcopHvsE38+AE=
 github.com/fulcrumproject/utils v0.0.0-20250716134607-ea1fe63b7dd8/go.mod h1:uuVSpub2p6zDISkti6cIQ/WRVuknzDbibXPGUdohNsc=
 github.com/gabriel-vasile/mimetype v1.4.9 h1:5k+WDwEsD9eTLL8Tz3L0VnmVh9QxGjRmjBvAG7U/oYY=
