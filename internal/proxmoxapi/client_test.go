@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
-	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 	"github.com/fulcrumproject/utils/confbuilder"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -131,8 +130,7 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	err := client.createPveUser(userReq)
 	if err != nil {
-		t.Logf("CreateUser returned error (may be expected): %v", err)
-		return // Skip the rest of the test if user creation fails
+		t.Fatalf("CreateUser failed: %v", err)
 	}
 	t.Logf("Successfully created user with ID: %s", testUUID)
 
@@ -142,8 +140,7 @@ func TestClientVMLifecycle(t *testing.T) {
 	// Step 1: Get user resources to determine available pools and next VM ID
 	resources, err := client.GetUserPools(testUser)
 	if err != nil {
-		t.Logf("GetUserPools returned error (may be expected): %v", err)
-		return // Skip if we can't get user resources
+		t.Fatalf("GetUserPools failed after user creation: %v", err)
 	}
 
 	// Extract next VM ID from user pools
@@ -152,9 +149,11 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	// Step 2: Get nodes to use for VM creation
 	nodes, err := client.GetNodes()
-	if err != nil || len(nodes) == 0 {
-		t.Logf("GetNodes returned error or no nodes (may be expected): %v", err)
-		return // Skip the rest if no nodes available
+	if err != nil {
+		t.Fatalf("GetNodes failed: %v", err)
+	}
+	if len(nodes) == 0 {
+		t.Fatalf("No nodes available in test environment")
 	}
 	selectedNode := nodes[rand.Intn(len(nodes))] // Randomly select a node
 	t.Logf("Randomly selected node: %s from %d available nodes", selectedNode, len(nodes))
@@ -163,41 +162,42 @@ func TestClientVMLifecycle(t *testing.T) {
 	// Use the same pool ID as the user, with fallback to default
 	poolID := testUUID // Use the same UUID as pool ID
 
-	// Select a random OS image from available images
-	var osImage string
-	if len(resources.Images) > 0 {
-		osImage = resources.Images[rand.Intn(len(resources.Images))]
-		t.Logf("Randomly selected OS image: %s from %d available images", osImage, len(resources.Images))
-	} else {
-		osImage = "alpine-standard-3.22.0-x86_64.iso" // Fallback to default
-		t.Logf("No images available in user resources, using fallback: %s", osImage)
+	// Select a random template from available templates
+	if len(resources.Templates) == 0 {
+		t.Fatalf("No templates available in user resources")
 	}
+
+	// Select a random template
+	selectedTemplate := resources.Templates[rand.Intn(len(resources.Templates))]
+	templateVMID := selectedTemplate.ID
+	templateName := selectedTemplate.Name
+	t.Logf("Randomly selected template: %s (VMID: %d) from %d available templates", templateName, templateVMID, len(resources.Templates))
 
 	if len(resources.Pools) > 0 {
 		// Try to extract pool information if available
 		t.Logf("Available pools: %+v", resources.Pools)
 	}
 
-	// Step 4: Create VM
+	// Step 4: Create VM from template
 	vmName := fmt.Sprintf("test-vm-%s", uuid.New().String()[:8])
-	vmReq := &vmagent.VmCreation{
-		Node:    selectedNode,
-		VMID:    vmid,
-		Name:    vmName,
-		Pool:    poolID,
-		Sockets: 1,
-		Cores:   1,
-		Memory:  512,
-		SCSI0:   8, // 8GB disk
-		IDE2:    osImage,
+	vmReq := &VmCreateFromTemplate{
+		Node:         selectedNode,
+		VMID:         vmid,
+		TemplateVMID: templateVMID,
+		Name:         vmName,
+		Pool:         poolID,
+		Sockets:      1,
+		Cores:        1,
+		Memory:       512,
+		DiskSize:     8,         // 8GB disk
+		IPAddress:    "0.0.0.0", // Use DHCP
 	}
 
-	err = client.CreateVM(testUser, vmReq)
+	err = client.CreateVMFromTemplate(testUser, vmReq)
 	if err != nil {
-		t.Logf("CreateVM returned error (may be expected): %v", err)
-		return // Skip the rest if VM creation fails
+		t.Fatalf("CreateVMFromTemplate failed: %v", err)
 	}
-	t.Logf("Successfully created VM %d with name: %s", vmid, vmName)
+	t.Logf("Successfully created VM %d from template %d with name: %s", vmid, templateVMID, vmName)
 
 	// Step 5: Wait for VM to be in stopped state after creation
 	if !waitForVMState(t, client, testUser, vmid, "stopped", 30*time.Second) {
@@ -207,39 +207,36 @@ func TestClientVMLifecycle(t *testing.T) {
 	// Get VM to verify it was created and get current state
 	vm, err := client.GetVM(testUser, vmid)
 	if err != nil {
-		t.Logf("GetVM returned error: %v", err)
-	} else {
-		assert.NotNil(t, vm, "VM should not be nil")
-		assert.Equal(t, vmid, vm.VMID, "VM ID should match")
-		assert.Equal(t, vmName, vm.Name, "VM name should match")
-		t.Logf("Retrieved VM: %+v", vm)
+		t.Fatalf("GetVM failed after creation: %v", err)
 	}
+	assert.NotNil(t, vm, "VM should not be nil")
+	assert.Equal(t, vmid, vm.VMID, "VM ID should match")
+	assert.Equal(t, vmName, vm.Name, "VM name should match")
+	t.Logf("Retrieved VM: %+v", vm)
 
 	// Step 6: Start VM
 	err = client.StartVM(testUser, vmid)
 	if err != nil {
-		t.Logf("StartVM returned error (may be expected): %v", err)
-	} else {
-		t.Logf("Successfully started VM %d", vmid)
+		t.Fatalf("StartVM failed: %v", err)
+	}
+	t.Logf("Successfully started VM %d", vmid)
 
-		// Wait for VM to be in running state
-		if !waitForVMState(t, client, testUser, vmid, "running", 60*time.Second) {
-			t.Logf("VM did not reach running state after start, continuing anyway...")
-		}
+	// Wait for VM to be in running state
+	if !waitForVMState(t, client, testUser, vmid, "running", 60*time.Second) {
+		t.Fatalf("VM did not reach running state after start")
 	}
 
 	// Step 6.5: Get detailed VM status and metrics
 	vmWithMetrics, err := client.GetVM(testUser, vmid)
 	if err != nil {
-		t.Logf("GetVM (with metrics) returned error (may be expected): %v", err)
-	} else {
-		assert.NotNil(t, vmWithMetrics, "VM with metrics should not be nil")
-		t.Logf("Retrieved detailed VM status and metrics:")
-		t.Logf("  Status: %s", vmWithMetrics.Status)
-		t.Logf("  CPU Usage: %.2f%%, Memory: %d MB", vmWithMetrics.CPU*100, vmWithMetrics.Mem/1024/1024)
-		t.Logf("  Disk: %d MB, Uptime: %d seconds", vmWithMetrics.Disk/1024/1024, vmWithMetrics.Uptime)
-		t.Logf("  Network: In=%d MB, Out=%d MB", vmWithMetrics.NetIn/1024/1024, vmWithMetrics.NetOut/1024/1024)
+		t.Fatalf("GetVM (with metrics) failed: %v", err)
 	}
+	assert.NotNil(t, vmWithMetrics, "VM with metrics should not be nil")
+	t.Logf("Retrieved detailed VM status and metrics:")
+	t.Logf("  Status: %s", vmWithMetrics.Status)
+	t.Logf("  CPU Usage: %.2f%%, Memory: %d MB", vmWithMetrics.CPU*100, vmWithMetrics.Mem/1024/1024)
+	t.Logf("  Disk: %d MB, Uptime: %d seconds", vmWithMetrics.Disk/1024/1024, vmWithMetrics.Uptime)
+	t.Logf("  Network: In=%d MB, Out=%d MB", vmWithMetrics.NetIn/1024/1024, vmWithMetrics.NetOut/1024/1024)
 
 	// Step 7: Open VNC (requires source IP)
 	vncReq := &VncEnable{
@@ -258,30 +255,27 @@ func TestClientVMLifecycle(t *testing.T) {
 	// Step 8: Stop VM
 	err = client.StopVM(testUser, vmid)
 	if err != nil {
-		t.Logf("StopVM returned error (may be expected): %v", err)
-	} else {
-		t.Logf("Successfully stopped VM %d", vmid)
+		t.Fatalf("StopVM failed: %v", err)
+	}
+	t.Logf("Successfully stopped VM %d", vmid)
 
-		// Wait for VM to be in stopped state
-		if !waitForVMState(t, client, testUser, vmid, "stopped", 60*time.Second) {
-			t.Logf("VM did not reach stopped state after stop, continuing anyway...")
-		}
+	// Wait for VM to be in stopped state
+	if !waitForVMState(t, client, testUser, vmid, "stopped", 60*time.Second) {
+		t.Fatalf("VM did not reach stopped state after stop")
 	}
 
 	// Step 9: Delete VM
 	err = client.DeleteVM(testUser, vmid)
 	if err != nil {
-		t.Logf("DeleteVM returned error (may be expected): %v", err)
-	} else {
-		t.Logf("Successfully deleted VM %d", vmid)
+		t.Fatalf("DeleteVM failed: %v", err)
 	}
+	t.Logf("Successfully deleted VM %d", vmid)
 
 	// Step 10: Wait for VM to be deleted and verify
-	if waitForVMDeleted(t, client, testUser, vmid, 2*time.Minute) {
-		t.Logf("VM %d successfully deleted", vmid)
-	} else {
-		t.Logf("Warning: VM %d still exists after deletion timeout", vmid)
+	if !waitForVMDeleted(t, client, testUser, vmid, 2*time.Minute) {
+		t.Fatalf("VM %d still exists after deletion timeout", vmid)
 	}
+	t.Logf("VM %d successfully deleted", vmid)
 }
 
 // waitForVMState waits for a VM to reach a specific state with timeout

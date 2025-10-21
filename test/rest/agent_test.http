@@ -25,7 +25,7 @@ Authorization: Bearer {{adminToken}}
     "tags": ["gpu-{{$timestamp}}", "high-memory", "ssd-storage"],
     "configuration": {
         "proxmoxAPI": {
-            "apiToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHAiOiJmdWxjcnVtLWFnZW50LWRldi0xIiwicm9sZXMiOltdfQ.9ZUzlFhEngDOX6Jt20uCcCeRF2rgOJHmJaODmv7Fa1c",
+            "apiToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHAiOiJmdWxjcnVtLXRlc3QtMSIsInJvbGVzIjpbInB2ZS1hcGktZXh0ZW5zaW9uIl19.YoSSdPV-RSrzB9XuZ8lfOKnV30F6sgi8W4lFKO-jzyE",
             "apiUrl": "https://172.30.232.7:5297",
             "insecureSkipTls": true,
             "timeout": 30,

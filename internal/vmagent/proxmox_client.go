@@ -31,13 +31,19 @@ type PveUserCreation struct {
 	ResetIfExists bool   `json:"reset_if_exists"`
 }
 
+// PveTemplate represents a VM template
+type PveTemplate struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 // PveUserResources represents the resources available to a PVE user
 type PveUserResources struct {
-	NextVMID  int      `json:"nextvmid"`
-	Nodes     []string `json:"nodes"`
-	Pools     []string `json:"pools"`
-	Images    []string `json:"images"`
-	Templates []string `json:"templates"`
+	NextVMID  int           `json:"nextvmid"`
+	Nodes     []string      `json:"nodes"`
+	Pools     []string      `json:"pools"`
+	Images    []string      `json:"images"`
+	Templates []PveTemplate `json:"templates"`
 }
 
 // Vm represents a virtual machine
