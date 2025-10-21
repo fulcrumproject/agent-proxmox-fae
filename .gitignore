@@ -8,3 +8,5 @@ __debug**
 coverage.out
 testagent
 features/
+.cursor/
+specs/
