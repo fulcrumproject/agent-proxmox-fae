@@ -18,16 +18,16 @@ func (v *VMAgent) typedMetricsReporter() agent.MetricsReporter[VMProperties, VMR
 	return func(ctx context.Context, service *agent.Service[VMProperties, VMResources]) ([]agent.MetricEntry, error) {
 		var metrics []agent.MetricEntry
 
-		if service == nil || service.ExternalID == nil {
-			return nil, fmt.Errorf("service is nil or externalID is nil")
+		if service == nil || service.AgentInstanceID == nil {
+			return nil, fmt.Errorf("service is nil or agentInstanceID is nil")
 		}
 
-		if service.Resources == nil {
-			return nil, fmt.Errorf("job service resources are nil")
+		if service.AgentInstanceData == nil {
+			return nil, fmt.Errorf("job service agent instance data are nil")
 		}
 
 		username := service.ConsumerID
-		vmid := service.Resources.VMID
+		vmid := service.AgentInstanceData.VMID
 
 		// Validate VMID is provided
 		if vmid == 0 {
@@ -51,21 +51,21 @@ func (v *VMAgent) typedMetricsReporter() agent.MetricsReporter[VMProperties, VMR
 			memUsageRatio = float64(vm.Mem) / float64(vm.MaxMem)
 		}
 
-		metrics = append(metrics,
-			agent.MetricEntry{
-				TypeName:   "vm.cpu.usage",
-				Value:      cpuUsageRatio,
-				ResourceID: strconv.Itoa(vmid),
-				ExternalID: strconv.Itoa(vmid),
-			},
+	metrics = append(metrics,
+		agent.MetricEntry{
+			TypeName:        "vm.cpu.usage",
+			Value:           cpuUsageRatio,
+			ResourceID:      strconv.Itoa(vmid),
+			AgentInstanceID: *service.AgentInstanceID,
+		},
 
-			agent.MetricEntry{
-				TypeName:   "vm.memory.usage",
-				Value:      memUsageRatio,
-				ResourceID: strconv.Itoa(vmid),
-				ExternalID: strconv.Itoa(vmid),
-			},
-		)
+		agent.MetricEntry{
+			TypeName:        "vm.memory.usage",
+			Value:           memUsageRatio,
+			ResourceID:      strconv.Itoa(vmid),
+			AgentInstanceID: *service.AgentInstanceID,
+		},
+	)
 
 		return metrics, nil
 	}

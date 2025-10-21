@@ -17,18 +17,18 @@ func extractUserAndVMID(service *agent.RawService) (string, int, error) {
 		return "", 0, fmt.Errorf("job service is nil")
 	}
 
-	if service.Resources == nil {
-		return "", 0, fmt.Errorf("job service resources are nil")
+	if service.AgentInstanceData == nil {
+		return "", 0, fmt.Errorf("job service agent instance data are nil")
 	}
 
 	var resources VMResources
-	if err := json.Unmarshal(*service.Resources, &resources); err != nil {
-		return "", 0, fmt.Errorf("failed to unmarshal service resources: %w", err)
+	if err := json.Unmarshal(*service.AgentInstanceData, &resources); err != nil {
+		return "", 0, fmt.Errorf("failed to unmarshal service agent instance data: %w", err)
 	}
 
 	// Validate that VMID was provided and is not zero
 	if resources.VMID == 0 {
-		return "", 0, fmt.Errorf("vmid is missing or zero in service resources")
+		return "", 0, fmt.Errorf("vmid is missing or zero in service agent instance data")
 	}
 
 	return service.ConsumerID, resources.VMID, nil
@@ -38,10 +38,10 @@ func extractUserAndVMID(service *agent.RawService) (string, int, error) {
 func (v *VMAgent) newJobResponse(vmid int) *agent.JobResponse[VMResources] {
 	vmidStr := strconv.Itoa(vmid)
 	return &agent.JobResponse[VMResources]{
-		Resources: &VMResources{
+		AgentInstanceData: &VMResources{
 			VMID: vmid,
 		},
-		ExternalID: &vmidStr,
+		AgentInstanceID: &vmidStr,
 	}
 }
 
@@ -131,14 +131,14 @@ func (v *VMAgent) UpdateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 	return func(ctx context.Context, job *agent.Job[VMProperties, VMProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM update job", "jobID", job.ID, "service", job.Service.Name)
 
-		// If the VM is not stopped, return not supported
-		if job.Service.Status != agent.ServiceStatusStopped {
-			return nil, &agent.UnsupportedJobError{Msg: fmt.Sprintf("cannot update a VM in status %s", job.Service.Status)}
-		}
+	// If the VM is not stopped, return not supported
+	if job.Service.Status != agent.ServiceStatusStopped {
+		return nil, fmt.Errorf("unsupported: cannot update a VM in status %s", job.Service.Status)
+	}
 
-		// Extract user and VMID from job
-		username := job.Service.ConsumerID
-		vmid := job.Service.Resources.VMID
+	// Extract user and VMID from job
+	username := job.Service.ConsumerID
+	vmid := job.Service.AgentInstanceData.VMID
 
 		// Validate that VMID was provided and is not zero
 		if vmid == 0 {
@@ -169,17 +169,17 @@ func (v *VMAgent) StartVMHandler() agent.JobHandler[VMProperties, VMProperties, 
 	return func(ctx context.Context, job *agent.Job[VMProperties, VMProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM start job", "jobID", job.ID, "service", job.Service.Name)
 
-		// Extract user and VMID from job
-		username := job.Service.ConsumerID
-		vmid := job.Service.Resources.VMID
+	// Extract user and VMID from job
+	username := job.Service.ConsumerID
+	vmid := job.Service.AgentInstanceData.VMID
 
-		// Validate that VMID was provided and is not zero
-		if vmid == 0 {
-			slog.Error("VMID is missing or zero in service resources")
-			return nil, fmt.Errorf("vmid is missing or zero in service resources")
-		}
+	// Validate that VMID was provided and is not zero
+	if vmid == 0 {
+		slog.Error("VMID is missing or zero in service agent instance data")
+		return nil, fmt.Errorf("vmid is missing or zero in service agent instance data")
+	}
 
-		// Start the VM
+	// Start the VM
 		err := v.proxmoxClient.StartVM(username, vmid)
 		if err != nil {
 			slog.Error("Failed to start VM", "vmid", vmid, "error", err)
@@ -196,17 +196,17 @@ func (v *VMAgent) StopVMHandler() agent.JobHandler[VMProperties, VMProperties, V
 	return func(ctx context.Context, job *agent.Job[VMProperties, VMProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM stop job", "jobID", job.ID, "service", job.Service.Name)
 
-		// Extract user and VMID from job
-		username := job.Service.ConsumerID
-		vmid := job.Service.Resources.VMID
+	// Extract user and VMID from job
+	username := job.Service.ConsumerID
+	vmid := job.Service.AgentInstanceData.VMID
 
-		// Validate that VMID was provided and is not zero
-		if vmid == 0 {
-			slog.Error("VMID is missing or zero in service resources")
-			return nil, fmt.Errorf("vmid is missing or zero in service resources")
-		}
+	// Validate that VMID was provided and is not zero
+	if vmid == 0 {
+		slog.Error("VMID is missing or zero in service agent instance data")
+		return nil, fmt.Errorf("vmid is missing or zero in service agent instance data")
+	}
 
-		// Stop the VM
+	// Stop the VM
 		err := v.proxmoxClient.StopVM(username, vmid)
 		if err != nil {
 			slog.Error("Failed to stop VM", "vmid", vmid, "error", err)
@@ -223,17 +223,17 @@ func (v *VMAgent) DeleteVMHandler() agent.JobHandler[VMProperties, VMProperties,
 	return func(ctx context.Context, job *agent.Job[VMProperties, VMProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM delete job", "jobID", job.ID, "service", job.Service.Name)
 
-		// Extract user and VMID from job
-		username := job.Service.ConsumerID
-		vmid := job.Service.Resources.VMID
+	// Extract user and VMID from job
+	username := job.Service.ConsumerID
+	vmid := job.Service.AgentInstanceData.VMID
 
-		// Validate that VMID was provided and is not zero
-		if vmid == 0 {
-			slog.Error("VMID is missing or zero in service resources")
-			return nil, fmt.Errorf("vmid is missing or zero in service resources")
-		}
+	// Validate that VMID was provided and is not zero
+	if vmid == 0 {
+		slog.Error("VMID is missing or zero in service agent instance data")
+		return nil, fmt.Errorf("vmid is missing or zero in service agent instance data")
+	}
 
-		// Delete the VM
+	// Delete the VM
 		err := v.proxmoxClient.DeleteVM(username, vmid)
 		if err != nil {
 			slog.Error("Failed to delete VM", "vmid", vmid, "error", err)

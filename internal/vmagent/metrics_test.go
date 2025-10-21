@@ -23,9 +23,9 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		{
 			name: "successful_metrics_collection",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": 123}`),
-				ExternalID: stringPtr("123"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": 123}`),
+				AgentInstanceID:   stringPtr("123"),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				vm := &Vm{
@@ -44,9 +44,9 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		{
 			name: "successful_metrics_zero_max_values",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": 456}`),
-				ExternalID: stringPtr("456"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": 456}`),
+				AgentInstanceID:   stringPtr("456"),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				vm := &Vm{
@@ -65,9 +65,9 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		{
 			name: "get_vm_fails",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": 789}`),
-				ExternalID: stringPtr("789"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": 789}`),
+				AgentInstanceID:   stringPtr("789"),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().GetVM("testuser", 789).Return(nil, errors.New("VM not found")).Once()
@@ -77,22 +77,22 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		},
 		// Note: service_is_nil test case removed because MetricsReporterWrapper doesn't handle nil service gracefully
 		{
-			name: "service_external_id_is_nil",
+			name: "service_agent_instance_id_is_nil",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": 999}`),
-				ExternalID: nil,
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": 999}`),
+				AgentInstanceID:   nil,
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {},
 			expectError: true,
-			errorMsg:    "service is nil or externalID is nil",
+			errorMsg:    "service is nil or agentInstanceID is nil",
 		},
 		{
 			name: "service_resources_missing_vmid",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{}`),
-				ExternalID: stringPtr("111"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{}`),
+				AgentInstanceID:   stringPtr("111"),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {},
 			expectError: true,
@@ -101,9 +101,9 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		{
 			name: "service_resources_vmid_wrong_type",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": "not-an-int"}`),
-				ExternalID: stringPtr("222"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": "not-an-int"}`),
+				AgentInstanceID:   stringPtr("222"),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {},
 			expectError: true,
@@ -112,9 +112,9 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 		{
 			name: "service_resources_is_nil",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  nil,
-				ExternalID: stringPtr("333"),
+				ConsumerID:        "testuser",
+				AgentInstanceData: nil,
+				AgentInstanceID:   stringPtr("333"),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {},
 			expectError: true,
@@ -165,12 +165,12 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 					assert.Equal(t, "vm.memory.usage", memMetric.TypeName)
 					assert.IsType(t, float64(0), memMetric.Value)
 
-					// Verify resource and external IDs match
-					vmidStr := (*tt.service.ExternalID)
+					// Verify resource and agent instance IDs match
+					vmidStr := (*tt.service.AgentInstanceID)
 					assert.Equal(t, vmidStr, cpuMetric.ResourceID)
-					assert.Equal(t, vmidStr, cpuMetric.ExternalID)
+					assert.Equal(t, vmidStr, cpuMetric.AgentInstanceID)
 					assert.Equal(t, vmidStr, memMetric.ResourceID)
-					assert.Equal(t, vmidStr, memMetric.ExternalID)
+					assert.Equal(t, vmidStr, memMetric.AgentInstanceID)
 				}
 			}
 		})

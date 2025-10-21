@@ -50,8 +50,8 @@ func TestExtractUserAndVMID(t *testing.T) {
 		{
 			name: "successful_extraction",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`{"vmid": 123}`),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`{"vmid": 123}`),
 			},
 			expectError:  false,
 			expectedUser: "testuser",
@@ -66,20 +66,20 @@ func TestExtractUserAndVMID(t *testing.T) {
 		{
 			name: "service_resources_is_nil",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  nil,
+				ConsumerID:        "testuser",
+				AgentInstanceData: nil,
 			},
 			expectError: true,
-			errorMsg:    "job service resources are nil",
+			errorMsg:    "job service agent instance data are nil",
 		},
 		{
 			name: "invalid_json_resources",
 			service: &agent.RawService{
-				ConsumerID: "testuser",
-				Resources:  rawResourcesPtr(`invalid json`),
+				ConsumerID:        "testuser",
+				AgentInstanceData: rawResourcesPtr(`invalid json`),
 			},
 			expectError: true,
-			errorMsg:    "failed to unmarshal service resources",
+			errorMsg:    "failed to unmarshal service agent instance data",
 		},
 	}
 
@@ -108,11 +108,11 @@ func TestVMAgent_NewJobResponse(t *testing.T) {
 	response := vmAgent.newJobResponse(vmid)
 
 	require.NotNil(t, response, "Response should not be nil")
-	require.NotNil(t, response.Resources, "Response resources should not be nil")
-	require.NotNil(t, response.ExternalID, "Response external ID should not be nil")
+	require.NotNil(t, response.AgentInstanceData, "Response agent instance data should not be nil")
+	require.NotNil(t, response.AgentInstanceID, "Response agent instance ID should not be nil")
 
-	assert.Equal(t, vmid, response.Resources.VMID, "Resources VMID should match")
-	assert.Equal(t, "456", *response.ExternalID, "External ID should match VMID as string")
+	assert.Equal(t, vmid, response.AgentInstanceData.VMID, "Agent instance data VMID should match")
+	assert.Equal(t, "456", *response.AgentInstanceID, "Agent instance ID should match VMID as string")
 }
 
 func TestVMAgent_CreateVMHandler(t *testing.T) {
@@ -286,15 +286,15 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Expected create VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
-				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
-				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceData, "Response agent instance data should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceID, "Response agent instance ID should not be nil")
 
-				// Parse the resources to verify VMID
+				// Parse the agent instance data to verify VMID
 				var resources VMResources
-				err := json.Unmarshal(*rawResponse.Resources, &resources)
-				require.NoError(t, err, "Should be able to unmarshal resources")
+				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
+				require.NoError(t, err, "Should be able to unmarshal agent instance data")
 				assert.Equal(t, 100, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "100", *rawResponse.ExternalID, "External ID should match VMID as string")
+				assert.Equal(t, "100", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}
@@ -314,10 +314,10 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Status:     agent.ServiceStatusStopped,
-					Resources:  rawResourcesPtr(`{"vmid": 200}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 200}`),
 				}),
 				Params: rawParamsPtr(VMProperties{
 					CPU:    4,
@@ -337,10 +337,10 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-2",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Status:     "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
-					Resources:  rawResourcesPtr(`{"vmid": 201}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 201}`),
 				}),
 				Params: rawParamsPtr(VMProperties{
 					CPU:    2,
@@ -357,10 +357,10 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-3",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Status:     agent.ServiceStatusStopped,
-					Resources:  rawResourcesPtr(`{}`), // Missing vmid
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{}`), // Missing vmid
 				}),
 				Params: rawParamsPtr(VMProperties{
 					CPU:    2,
@@ -376,10 +376,10 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-4",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Status:     agent.ServiceStatusStopped,
-					Resources:  rawResourcesPtr(`{"vmid": 202}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 202}`),
 				}),
 				Params: rawParamsPtr(VMProperties{
 					CPU:    8,
@@ -424,21 +424,21 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
 
 				if tt.isUnsupported {
-					var unsupportedErr *agent.UnsupportedJobError
-					assert.ErrorAs(t, err, &unsupportedErr, "Error should be UnsupportedJobError")
+					// Check that the error message contains "unsupported"
+					assert.Contains(t, err.Error(), "unsupported", "Error should indicate unsupported operation")
 				}
 			} else {
 				require.NoError(t, err, "Expected update VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
-				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
-				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceData, "Response agent instance data should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceID, "Response agent instance ID should not be nil")
 
-				// Parse the resources to verify VMID
+				// Parse the agent instance data to verify VMID
 				var resources VMResources
-				err := json.Unmarshal(*rawResponse.Resources, &resources)
-				require.NoError(t, err, "Should be able to unmarshal resources")
+				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
+				require.NoError(t, err, "Should be able to unmarshal agent instance data")
 				assert.Equal(t, 200, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "200", *rawResponse.ExternalID, "External ID should match VMID as string")
+				assert.Equal(t, "200", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}
@@ -457,9 +457,9 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 300}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 300}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -472,9 +472,9 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-2",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  nil, // Missing resources
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: nil, // Missing agent instance data
 				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -486,9 +486,9 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-3",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 301}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 301}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -527,15 +527,15 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Expected start VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
-				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
-				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceData, "Response agent instance data should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceID, "Response agent instance ID should not be nil")
 
-				// Parse the resources to verify VMID
+				// Parse the agent instance data to verify VMID
 				var resources VMResources
-				err := json.Unmarshal(*rawResponse.Resources, &resources)
-				require.NoError(t, err, "Should be able to unmarshal resources")
+				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
+				require.NoError(t, err, "Should be able to unmarshal agent instance data")
 				assert.Equal(t, 300, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "300", *rawResponse.ExternalID, "External ID should match VMID as string")
+				assert.Equal(t, "300", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}
@@ -554,9 +554,9 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 400}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 400}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -569,9 +569,9 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-2",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": "invalid"}`), // Wrong type
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": "invalid"}`), // Wrong type
 				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -583,9 +583,9 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-3",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 401}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 401}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -624,15 +624,15 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Expected stop VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
-				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
-				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceData, "Response agent instance data should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceID, "Response agent instance ID should not be nil")
 
-				// Parse the resources to verify VMID
+				// Parse the agent instance data to verify VMID
 				var resources VMResources
-				err := json.Unmarshal(*rawResponse.Resources, &resources)
-				require.NoError(t, err, "Should be able to unmarshal resources")
+				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
+				require.NoError(t, err, "Should be able to unmarshal agent instance data")
 				assert.Equal(t, 400, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "400", *rawResponse.ExternalID, "External ID should match VMID as string")
+				assert.Equal(t, "400", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}
@@ -651,9 +651,9 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 500}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 500}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -666,9 +666,9 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-2",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{}`), // Missing vmid
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{}`), // Missing vmid
 				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -680,9 +680,9 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 			job: &agent.RawJob{
 				ID: "test-job-3",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID: "testuser",
-					Name:       "test-vm",
-					Resources:  rawResourcesPtr(`{"vmid": 501}`),
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 501}`),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -721,15 +721,15 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Expected delete VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
-				require.NotNil(t, rawResponse.Resources, "Response resources should not be nil")
-				require.NotNil(t, rawResponse.ExternalID, "Response external ID should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceData, "Response agent instance data should not be nil")
+				require.NotNil(t, rawResponse.AgentInstanceID, "Response agent instance ID should not be nil")
 
-				// Parse the resources to verify VMID
+				// Parse the agent instance data to verify VMID
 				var resources VMResources
-				err := json.Unmarshal(*rawResponse.Resources, &resources)
-				require.NoError(t, err, "Should be able to unmarshal resources")
+				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
+				require.NoError(t, err, "Should be able to unmarshal agent instance data")
 				assert.Equal(t, 500, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "500", *rawResponse.ExternalID, "External ID should match VMID as string")
+				assert.Equal(t, "500", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}

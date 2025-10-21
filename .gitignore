@@ -6,7 +6,6 @@ __debug**
 .env_proxmoxapi.test
 .DS_Store
 coverage.out
-testagent
-features/
+/agent
 .cursor/
 specs/

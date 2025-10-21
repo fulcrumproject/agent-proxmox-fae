@@ -55,11 +55,11 @@ func NewVMAgent(
 	stdAgent.OnHealth(vmAgent.HealthHandler())
 
 	// Register job handlers
-	stdAgent.OnJob(agent.JobActionServiceCreate, agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
-	stdAgent.OnJob(agent.JobActionServiceUpdate, agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
-	stdAgent.OnJob(agent.JobActionServiceStart, agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
-	stdAgent.OnJob(agent.JobActionServiceStop, agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
-	stdAgent.OnJob(agent.JobActionServiceDelete, agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
+	stdAgent.OnJob("service.create", agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
+	stdAgent.OnJob("service.update", agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
+	stdAgent.OnJob("service.start", agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
+	stdAgent.OnJob("service.stop", agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
+	stdAgent.OnJob("service.delete", agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
 
 	// Register metrics reporter
 	stdAgent.OnMetrics(vmAgent.MetricsReporter())
@@ -96,6 +96,6 @@ func (v *VMAgent) GetUptime() time.Duration {
 	return v.stdAgent.GetUptime()
 }
 
-func (v *VMAgent) GetJobStats() (int, int, int, int) {
+func (v *VMAgent) GetJobStats() (int, int, int) {
 	return v.stdAgent.GetJobStats()
 }
