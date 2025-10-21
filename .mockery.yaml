@@ -9,7 +9,7 @@ packages:
       filename: mock_fulcrum_client_test.go
     interfaces:
       FulcrumClient: {}
-  github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent:
+  github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent:
     config:
       filename: mock_proxmox_client_test.go
       dir: internal/vmagent

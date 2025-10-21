@@ -11,9 +11,9 @@ import (
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/fulcrumcli"
 	"github.com/fulcrumproject/agent-lib-go/pkg/stdagent"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/proxmoxapi"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/proxmoxapi"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 	"github.com/fulcrumproject/utils/confbuilder"
 	"github.com/fulcrumproject/utils/logging"
 )

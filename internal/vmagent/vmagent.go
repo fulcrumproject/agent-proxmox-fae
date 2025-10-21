@@ -8,7 +8,7 @@ import (
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
 	"github.com/fulcrumproject/agent-lib-go/pkg/stdagent"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
 )
 
 type RemoteConfig struct {

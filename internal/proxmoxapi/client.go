@@ -7,8 +7,8 @@ import (
 
 	"resty.dev/v3"
 
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 )
 
 // Client represents a REST client for the Proxmox API

@@ -1,4 +1,4 @@
-module github.com/fulcrumproject/agent-proxmox-wrapped
+module github.com/fulcrumproject/agent-proxmox-fae
 
 go 1.24.5
 

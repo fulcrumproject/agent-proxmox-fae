@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/config"
-	"github.com/fulcrumproject/agent-proxmox-wrapped/internal/vmagent"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 	"github.com/fulcrumproject/utils/confbuilder"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
