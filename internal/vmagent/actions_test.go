@@ -138,12 +138,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "debian-12-standard.iso",
 				}),
 			},
-			setupMock: func(mockClient *MockProxmoxClient) {
-				userResources := &PveUserResources{
-					NextID: 100,
-					Nodes:  []string{"node1", "node2"},
-					Pools:  []string{"pool1"},
-				}
+		setupMock: func(mockClient *MockProxmoxClient) {
+			userResources := &PveUserResources{
+				NextVMID: 100,
+				Nodes:    []string{"node1", "node2"},
+				Pools:    []string{"pool1"},
+			}
 				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
 				// Use MatchedBy to accept any node from the available nodes
 				mockClient.EXPECT().CreateVM("testuser", matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-12-standard.iso")).Return(nil).Once()
@@ -192,12 +192,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-			setupMock: func(mockClient *MockProxmoxClient) {
-				userResources := &PveUserResources{
-					NextID: 101,
-					Nodes:  []string{}, // No nodes available
-					Pools:  []string{"pool1"},
-				}
+		setupMock: func(mockClient *MockProxmoxClient) {
+			userResources := &PveUserResources{
+				NextVMID: 101,
+				Nodes:    []string{}, // No nodes available
+				Pools:    []string{"pool1"},
+			}
 				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
 			},
 			expectError: true,
@@ -218,12 +218,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-			setupMock: func(mockClient *MockProxmoxClient) {
-				userResources := &PveUserResources{
-					NextID: 102,
-					Nodes:  []string{"node1"},
-					Pools:  []string{}, // No pools available
-				}
+		setupMock: func(mockClient *MockProxmoxClient) {
+			userResources := &PveUserResources{
+				NextVMID: 102,
+				Nodes:    []string{"node1"},
+				Pools:    []string{}, // No pools available
+			}
 				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
 			},
 			expectError: true,
@@ -244,12 +244,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-			setupMock: func(mockClient *MockProxmoxClient) {
-				userResources := &PveUserResources{
-					NextID: 103,
-					Nodes:  []string{"node1"},
-					Pools:  []string{"pool1"},
-				}
+		setupMock: func(mockClient *MockProxmoxClient) {
+			userResources := &PveUserResources{
+				NextVMID: 103,
+				Nodes:    []string{"node1"},
+				Pools:    []string{"pool1"},
+			}
 				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
 				mockClient.EXPECT().CreateVM("testuser", matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine.iso")).Return(errors.New("insufficient resources")).Once()
 			},

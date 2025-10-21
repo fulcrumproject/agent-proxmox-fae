@@ -33,10 +33,11 @@ type PveUserCreation struct {
 
 // PveUserResources represents the resources available to a PVE user
 type PveUserResources struct {
-	NextID int      `json:"nextid"`
-	Nodes  []string `json:"nodes"`
-	Pools  []string `json:"pools"`
-	IDE2   []string `json:"ide2"`
+	NextVMID  int      `json:"nextvmid"`
+	Nodes     []string `json:"nodes"`
+	Pools     []string `json:"pools"`
+	Images    []string `json:"images"`
+	Templates []string `json:"templates"`
 }
 
 // Vm represents a virtual machine

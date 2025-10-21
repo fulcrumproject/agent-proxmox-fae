@@ -81,8 +81,8 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 			}
 		}
 
-		// Get next available VM ID
-		nextID := userResources.NextID
+	// Get next available VM ID
+	nextID := userResources.NextVMID
 
 		// Select a random node from the list of available nodes
 		if len(userResources.Nodes) == 0 {

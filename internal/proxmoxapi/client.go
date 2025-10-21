@@ -51,7 +51,7 @@ type NodesMetricsNodeData struct {
 
 // NextID represents the response for getting the next available VM ID
 type NextID struct {
-	NextID int `json:"nextid"`
+	NextID int `json:"nextvmid"`
 }
 
 // VmClone represents the request for cloning a VM
@@ -93,6 +93,105 @@ type FaeSecrets struct {
 type FaeAuthTokenRequest struct {
 	App   string        `json:"app"`
 	Roles []interface{} `json:"roles"`
+}
+
+// VmCreateFromISO represents the request for creating a VM from ISO
+type VmCreateFromISO struct {
+	Node     string `json:"node"`
+	VMID     int    `json:"vmid"`
+	Name     string `json:"name"`
+	Pool     string `json:"pool"`
+	Sockets  int    `json:"sockets"`
+	Cores    int    `json:"cores"`
+	Memory   int    `json:"memory"`
+	DiskSize int    `json:"disksize"`
+	Image    string `json:"image"`
+}
+
+// VmCreateFromTemplate represents the request for creating a VM from template
+type VmCreateFromTemplate struct {
+	Node         string `json:"node"`
+	VMID         int    `json:"vmid"`
+	TemplateVMID int    `json:"templatevmid"`
+	Name         string `json:"name"`
+	Pool         string `json:"pool"`
+	Sockets      int    `json:"sockets"`
+	Cores        int    `json:"cores"`
+	Memory       int    `json:"memory"`
+	DiskSize     int    `json:"disksize"`
+	LoginUser    string `json:"loginuser,omitempty"`
+	LoginPass    string `json:"loginpass,omitempty"`
+	LoginSSHKey  string `json:"loginsshkey,omitempty"`
+	IPAddress    string `json:"ipaddress,omitempty"`
+	Netmask      int    `json:"netmask,omitempty"`
+	Gateway      string `json:"gateway,omitempty"`
+	Nameserver   string `json:"nameserver,omitempty"`
+	SearchDomain string `json:"searchdomain,omitempty"`
+}
+
+// SSHKeyRequest represents the request for generating SSH keys
+type SSHKeyRequest struct {
+	Password string `json:"password"`
+	Comment  string `json:"comment"`
+}
+
+// SSHKey represents the SSH key pair response
+type SSHKey struct {
+	Private string `json:"private"`
+	Public  string `json:"public"`
+}
+
+// FirewallRule represents a firewall rule
+type FirewallRule struct {
+	Pos     *int   `json:"pos,omitempty"`
+	Type    string `json:"type"`
+	Proto   string `json:"proto"`
+	Source  string `json:"source,omitempty"`
+	Sport   string `json:"sport,omitempty"`
+	Dest    string `json:"dest,omitempty"`
+	Dport   string `json:"dport,omitempty"`
+	Action  string `json:"action"`
+	Comment string `json:"comment,omitempty"`
+}
+
+// Snapshot represents a VM snapshot
+type Snapshot struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parent      string `json:"parent,omitempty"`
+	SnapTime    int64  `json:"snaptime,omitempty"`
+	VMState     bool   `json:"vmstate,omitempty"`
+	Running     bool   `json:"running,omitempty"`
+}
+
+// TakeSnapshot represents the request for taking a snapshot
+type TakeSnapshot struct {
+	SnapName    string `json:"snapname"`
+	Description string `json:"description,omitempty"`
+	VMState     bool   `json:"vmstate,omitempty"`
+}
+
+// SupportVm represents a Fulcrum support VM
+type SupportVm struct {
+	ID       int                    `json:"id"`
+	Name     string                 `json:"name"`
+	Hostname string                 `json:"hostname"`
+	IPv4     string                 `json:"ipv4"`
+	Config   map[string]interface{} `json:"config,omitempty"`
+}
+
+// FulcrumNetworkVmConfig represents configuration for Fulcrum Network VM
+type FulcrumNetworkVmConfig struct {
+	Daemons string `json:"daemons,omitempty"`
+	FrrConf string `json:"frr_conf,omitempty"`
+	RcLocal string `json:"rc_local,omitempty"`
+	VlanTag int    `json:"vlan_tag,omitempty"`
+}
+
+// FulcrumAgentVmConfig represents configuration for Fulcrum Agent VM
+type FulcrumAgentVmConfig struct {
+	Env     string `json:"env,omitempty"`
+	Gateway string `json:"gateway,omitempty"`
 }
 
 // FaeAuthToken represents the response for FAE auth token generation
@@ -302,7 +401,7 @@ func (c *Client) GetVMNextID() (*NextID, error) {
 
 	resp, err := c.restyClient.R().
 		SetResult(&nextID).
-		Get("/fae/v1/vms/nextid")
+		Get("/fae/v1/nodes/nextvmid")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get VM next ID: %w", err)
@@ -335,19 +434,57 @@ func (c *Client) GetUserVMs(username string) ([]vmagent.Vm, error) {
 	return vms, nil
 }
 
-// CreateVM creates a new virtual machine
+// CreateVM creates a new virtual machine (implements vmagent.ProxmoxClient interface)
+// This method maintains backward compatibility by routing to the appropriate endpoint
 func (c *Client) CreateVM(username string, vmReq *vmagent.VmCreation) error {
+	// The new API split VM creation into two endpoints: from-iso and from-template
+	// For now, we'll use the from-iso endpoint as it matches the old behavior
+	isoReq := &VmCreateFromISO{
+		Node:     vmReq.Node,
+		VMID:     vmReq.VMID,
+		Name:     vmReq.Name,
+		Pool:     vmReq.Pool,
+		Sockets:  vmReq.Sockets,
+		Cores:    vmReq.Cores,
+		Memory:   vmReq.Memory,
+		DiskSize: vmReq.SCSI0,
+		Image:    vmReq.IDE2,
+	}
+
+	return c.CreateVMFromISO(username, isoReq)
+}
+
+// CreateVMFromISO creates a new virtual machine from an ISO image
+func (c *Client) CreateVMFromISO(username string, vmReq *VmCreateFromISO) error {
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
 		SetBody(vmReq).
-		Post("/fae/v1/vms")
+		Post("/fae/v1/vms/create/from-iso")
 
 	if err != nil {
-		return fmt.Errorf("failed to create VM: %w", err)
+		return fmt.Errorf("failed to create VM from ISO: %w", err)
 	}
 
 	if resp.IsError() {
-		return fmt.Errorf("create VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return fmt.Errorf("create VM from ISO request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// CreateVMFromTemplate creates a new virtual machine from a template
+func (c *Client) CreateVMFromTemplate(username string, vmReq *VmCreateFromTemplate) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetBody(vmReq).
+		Post("/fae/v1/vms/create/from-template")
+
+	if err != nil {
+		return fmt.Errorf("failed to create VM from template: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("create VM from template request failed with status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	return nil
@@ -525,7 +662,7 @@ func (c *Client) GenerateSecrets() (*FaeSecrets, error) {
 
 	resp, err := c.restyClient.R().
 		SetResult(&secrets).
-		Get("/root/misc/generate-secrets")
+		Get("/administration/misc/generate-secrets")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate secrets: %w", err)
@@ -545,7 +682,7 @@ func (c *Client) GenerateFaeAuthToken(tokenReq *FaeAuthTokenRequest) (*FaeAuthTo
 	resp, err := c.restyClient.R().
 		SetBody(tokenReq).
 		SetResult(&token).
-		Post("/root/fae-auth-token/generate")
+		Post("/administration/fae-auth-token/generate")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate FAE auth token: %w", err)
@@ -564,7 +701,7 @@ func (c *Client) GetValidFaeAuthTokenApps() ([]string, error) {
 
 	resp, err := c.restyClient.R().
 		SetResult(&apps).
-		Get("/root/fae-auth-token/apps")
+		Get("/administration/fae-auth-token/apps")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get valid FAE auth token apps: %w", err)
@@ -580,7 +717,7 @@ func (c *Client) GetValidFaeAuthTokenApps() ([]string, error) {
 // AddFaeAuthTokenApp adds a new FAE auth token app
 func (c *Client) AddFaeAuthTokenApp(app string) error {
 	resp, err := c.restyClient.R().
-		Post(fmt.Sprintf("/root/fae-auth-token/apps/%s", app))
+		Post(fmt.Sprintf("/administration/fae-auth-token/apps/%s", app))
 
 	if err != nil {
 		return fmt.Errorf("failed to add FAE auth token app: %w", err)
@@ -596,7 +733,7 @@ func (c *Client) AddFaeAuthTokenApp(app string) error {
 // RemoveFaeAuthTokenApp removes a FAE auth token app
 func (c *Client) RemoveFaeAuthTokenApp(app string) error {
 	resp, err := c.restyClient.R().
-		Delete(fmt.Sprintf("/root/fae-auth-token/apps/%s", app))
+		Delete(fmt.Sprintf("/administration/fae-auth-token/apps/%s", app))
 
 	if err != nil {
 		return fmt.Errorf("failed to remove FAE auth token app: %w", err)
@@ -604,6 +741,320 @@ func (c *Client) RemoveFaeAuthTokenApp(app string) error {
 
 	if resp.IsError() {
 		return fmt.Errorf("remove FAE auth token app request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetFaeAuthTokenRoles gets the list of valid FAE auth token roles
+func (c *Client) GetFaeAuthTokenRoles() (map[string]interface{}, error) {
+	var roles map[string]interface{}
+
+	resp, err := c.restyClient.R().
+		SetResult(&roles).
+		Get("/administration/fae-auth-token/roles")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get FAE auth token roles: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get FAE auth token roles request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return roles, nil
+}
+
+// GenerateSSHKey generates a new SSH key pair
+func (c *Client) GenerateSSHKey(req *SSHKeyRequest) (*SSHKey, error) {
+	var sshKey SSHKey
+
+	resp, err := c.restyClient.R().
+		SetBody(req).
+		SetResult(&sshKey).
+		Post("/fae/v1/vms/sshkey-gen")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate SSH key: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("generate SSH key request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &sshKey, nil
+}
+
+// SetVMBootDevice sets the boot device for a VM
+func (c *Client) SetVMBootDevice(username string, vmid int, device string) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		Patch(fmt.Sprintf("/fae/v1/vms/%d/boot/%s", vmid, device))
+
+	if err != nil {
+		return fmt.Errorf("failed to set VM boot device: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("set VM boot device request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetVMFirewallRules retrieves the firewall rules for a VM
+func (c *Client) GetVMFirewallRules(username string, vmid int) ([]FirewallRule, error) {
+	var rules []FirewallRule
+
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetResult(&rules).
+		Get(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM firewall rules: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get VM firewall rules request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return rules, nil
+}
+
+// AddVMFirewallRule adds a firewall rule to a VM
+func (c *Client) AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetBody(rule).
+		Post(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+
+	if err != nil {
+		return fmt.Errorf("failed to add VM firewall rule: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("add VM firewall rule request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// DeleteVMFirewallRule deletes a firewall rule from a VM
+func (c *Client) DeleteVMFirewallRule(username string, vmid int, pos int) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		Delete(fmt.Sprintf("/fae/v1/vms/%d/firewall/%d", vmid, pos))
+
+	if err != nil {
+		return fmt.Errorf("failed to delete VM firewall rule: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("delete VM firewall rule request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetVMSnapshots retrieves all snapshots for a VM
+func (c *Client) GetVMSnapshots(username string, vmid int) ([]Snapshot, error) {
+	var snapshots []Snapshot
+
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetResult(&snapshots).
+		Get(fmt.Sprintf("/fae/v1/vms/%d/snapshot", vmid))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VM snapshots: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get VM snapshots request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return snapshots, nil
+}
+
+// TakeVMSnapshot takes a snapshot of a VM
+func (c *Client) TakeVMSnapshot(username string, vmid int, snapshot *TakeSnapshot) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		SetBody(snapshot).
+		Post(fmt.Sprintf("/fae/v1/vms/%d/snapshot", vmid))
+
+	if err != nil {
+		return fmt.Errorf("failed to take VM snapshot: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("take VM snapshot request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// DeleteVMSnapshot deletes a snapshot from a VM
+func (c *Client) DeleteVMSnapshot(username string, vmid int, snapname string) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		Delete(fmt.Sprintf("/fae/v1/vms/%d/snapshot/%s", vmid, snapname))
+
+	if err != nil {
+		return fmt.Errorf("failed to delete VM snapshot: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("delete VM snapshot request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// RollbackVMSnapshot rolls back a VM to a snapshot
+func (c *Client) RollbackVMSnapshot(username string, vmid int, snapname string) error {
+	resp, err := c.restyClient.R().
+		SetHeader("PVE-User", username).
+		Post(fmt.Sprintf("/fae/v1/vms/%d/snapshot/%s/rollback", vmid, snapname))
+
+	if err != nil {
+		return fmt.Errorf("failed to rollback VM snapshot: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("rollback VM snapshot request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetFulcrumSupportVMs retrieves all Fulcrum support VMs
+func (c *Client) GetFulcrumSupportVMs() ([]SupportVm, error) {
+	var vms []SupportVm
+
+	resp, err := c.restyClient.R().
+		SetResult(&vms).
+		Get("/administration/fulcrum-support-vms")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Fulcrum support VMs: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get Fulcrum support VMs request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return vms, nil
+}
+
+// GetFulcrumSupportVMDetails retrieves details for a specific Fulcrum support VM
+func (c *Client) GetFulcrumSupportVMDetails(vmid int) (*SupportVm, error) {
+	var vm SupportVm
+
+	resp, err := c.restyClient.R().
+		SetResult(&vm).
+		Get(fmt.Sprintf("/administration/fulcrum-support-vms/%d", vmid))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Fulcrum support VM details: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get Fulcrum support VM details request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &vm, nil
+}
+
+// GetFulcrumSupportVMNoVNC retrieves the noVNC support VM
+func (c *Client) GetFulcrumSupportVMNoVNC() (*SupportVm, error) {
+	var vm SupportVm
+
+	resp, err := c.restyClient.R().
+		SetResult(&vm).
+		Get("/administration/fulcrum-support-vms/novnc")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get noVNC support VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get noVNC support VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &vm, nil
+}
+
+// GetFulcrumSupportVMFulcrumNetwork retrieves the Fulcrum Network support VM
+func (c *Client) GetFulcrumSupportVMFulcrumNetwork(includeConfig bool) (*SupportVm, error) {
+	var vm SupportVm
+
+	resp, err := c.restyClient.R().
+		SetQueryParam("include_config", fmt.Sprintf("%t", includeConfig)).
+		SetResult(&vm).
+		Get("/administration/fulcrum-support-vms/fulcrum-network")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Fulcrum Network support VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get Fulcrum Network support VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &vm, nil
+}
+
+// ConfigureFulcrumNetworkVM configures the Fulcrum Network VM
+func (c *Client) ConfigureFulcrumNetworkVM(config *FulcrumNetworkVmConfig) error {
+	resp, err := c.restyClient.R().
+		SetBody(config).
+		Put("/administration/fulcrum-support-vms/fulcrum-network")
+
+	if err != nil {
+		return fmt.Errorf("failed to configure Fulcrum Network VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("configure Fulcrum Network VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return nil
+}
+
+// GetFulcrumSupportVMFulcrumAgent retrieves the Fulcrum Agent support VM
+func (c *Client) GetFulcrumSupportVMFulcrumAgent(includeConfig bool) (*SupportVm, error) {
+	var vm SupportVm
+
+	resp, err := c.restyClient.R().
+		SetQueryParam("include_config", fmt.Sprintf("%t", includeConfig)).
+		SetResult(&vm).
+		Get("/administration/fulcrum-support-vms/fulcrum-agent")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Fulcrum Agent support VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, fmt.Errorf("get Fulcrum Agent support VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	return &vm, nil
+}
+
+// ConfigureFulcrumAgentVM configures the Fulcrum Agent VM
+func (c *Client) ConfigureFulcrumAgentVM(config *FulcrumAgentVmConfig) error {
+	resp, err := c.restyClient.R().
+		SetBody(config).
+		Put("/administration/fulcrum-support-vms/fulcrum-agent")
+
+	if err != nil {
+		return fmt.Errorf("failed to configure Fulcrum Agent VM: %w", err)
+	}
+
+	if resp.IsError() {
+		return fmt.Errorf("configure Fulcrum Agent VM request failed with status %d: %s", resp.StatusCode(), resp.String())
 	}
 
 	return nil

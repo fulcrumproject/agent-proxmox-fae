@@ -147,7 +147,7 @@ func TestClientVMLifecycle(t *testing.T) {
 	}
 
 	// Extract next VM ID from user pools
-	vmid := resources.NextID
+	vmid := resources.NextVMID
 	t.Logf("Got next VM ID from user pools: %d", vmid)
 
 	// Step 2: Get nodes to use for VM creation
@@ -165,9 +165,9 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	// Select a random OS image from available images
 	var osImage string
-	if len(resources.IDE2) > 0 {
-		osImage = resources.IDE2[rand.Intn(len(resources.IDE2))]
-		t.Logf("Randomly selected OS image: %s from %d available images", osImage, len(resources.IDE2))
+	if len(resources.Images) > 0 {
+		osImage = resources.Images[rand.Intn(len(resources.Images))]
+		t.Logf("Randomly selected OS image: %s from %d available images", osImage, len(resources.Images))
 	} else {
 		osImage = "alpine-standard-3.22.0-x86_64.iso" // Fallback to default
 		t.Logf("No images available in user resources, using fallback: %s", osImage)
