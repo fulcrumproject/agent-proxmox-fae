@@ -26,7 +26,7 @@ func (v *VMAgent) typedMetricsReporter() agent.MetricsReporter[VMProperties, VMR
 			return nil, fmt.Errorf("job service agent instance data are nil")
 		}
 
-		username := service.ConsumerID
+		username, _ := MakeUserIDs(service.ConsumerID)
 		vmid := service.AgentInstanceData.VMID
 
 		// Validate VMID is provided

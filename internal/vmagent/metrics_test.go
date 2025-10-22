@@ -43,7 +43,7 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 					NetOut:    1 * 1024 * 1024,         // 1MB/s
 					Uptime:    3600,                    // 1 hour
 				}
-				mockClient.EXPECT().GetVM("testuser", 123).Return(vm, nil).Once()
+				mockClient.EXPECT().GetVM("user-testuser", 123).Return(vm, nil).Once()
 			},
 			expectError:     false,
 			expectedMetrics: 8,
@@ -71,7 +71,7 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 					NetOut:    0,
 					Uptime:    0,
 				}
-				mockClient.EXPECT().GetVM("testuser", 456).Return(vm, nil).Once()
+				mockClient.EXPECT().GetVM("user-testuser", 456).Return(vm, nil).Once()
 			},
 			expectError:     false,
 			expectedMetrics: 8,
@@ -84,7 +84,7 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 				AgentInstanceID:   stringPtr("789"),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().GetVM("testuser", 789).Return(nil, errors.New("VM not found")).Once()
+				mockClient.EXPECT().GetVM("user-testuser", 789).Return(nil, errors.New("VM not found")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to get VM",
