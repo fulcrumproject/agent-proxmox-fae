@@ -46,6 +46,25 @@ func rawParamsPtr(props VMProperties) *json.RawMessage {
 	return &raw
 }
 
+// Helper function to create raw params from VMUpdateProperties
+func rawUpdateParamsPtr(props VMUpdateProperties) *json.RawMessage {
+	data, err := json.Marshal(props)
+	if err != nil {
+		panic(err) // This should never happen in tests
+	}
+	raw := json.RawMessage(data)
+	return &raw
+}
+
+// Helper functions to create pointers for test data
+func intPtr(v int) *int {
+	return &v
+}
+
+func firewallRulesPtr(rules []FirewallRule) *[]FirewallRule {
+	return &rules
+}
+
 func TestExtractUserAndVMID(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -705,9 +724,11 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 		expectError   bool
 		errorMsg      string
 		isUnsupported bool
+		expectedVMID  int
 	}{
 		{
-			name: "successful_vm_update",
+			name:         "successful_vm_update",
+			expectedVMID: 200,
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
@@ -716,9 +737,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{"vmid": 200}`),
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    4,
-					Memory: 2048,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(4),
+					Memory: intPtr(2048),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -739,9 +760,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
 					AgentInstanceData: rawResourcesPtr(`{"vmid": 201}`),
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(2),
+					Memory: intPtr(1024),
 				}),
 			},
 			setupMock:     func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -759,9 +780,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{}`), // Missing vmid
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(2),
+					Memory: intPtr(1024),
 				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -778,9 +799,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{"vmid": 202}`),
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    8,
-					Memory: 4096,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(8),
+					Memory: intPtr(4096),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -791,6 +812,90 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			expectError: true,
 			errorMsg:    "failed to update VM",
+		},
+		{
+			name:         "successful_update_with_firewall_rules",
+			expectedVMID: 203,
+			job: &agent.RawJob{
+				ID: "test-job-5",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 203}`),
+				}),
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(4),
+					Memory: intPtr(2048),
+					FirewallRules: firewallRulesPtr([]FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "443",
+							Comment: "Allow HTTPS",
+						},
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "3306",
+							Comment: "Allow MySQL",
+						},
+					}),
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				mockClient.EXPECT().PatchVM(testUserID, 203, &VmPatch{
+					Cores:  4,
+					Memory: 2048,
+				}).Return(nil).Once()
+				// Expect GetVMFirewallRules for reconciliation
+				mockClient.EXPECT().GetVMFirewallRules(testUserID, 203).Return([]FirewallRule{}, nil).Once()
+				// Expect firewall rule additions
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 203, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "443" && rule.Comment == "Allow HTTPS"
+				})).Return(nil).Once()
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 203, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "3306" && rule.Comment == "Allow MySQL"
+				})).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:         "update_firewall_failure_does_not_block",
+			expectedVMID: 204,
+			job: &agent.RawJob{
+				ID: "test-job-6",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 204}`),
+				}),
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(2),
+					Memory: intPtr(1024),
+					FirewallRules: firewallRulesPtr([]FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "9000",
+							Comment: "App port",
+						},
+					}),
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				mockClient.EXPECT().PatchVM(testUserID, 204, &VmPatch{
+					Cores:  2,
+					Memory: 1024,
+				}).Return(nil).Once()
+				// Firewall reconciliation fails but VM update should still succeed
+				mockClient.EXPECT().GetVMFirewallRules(testUserID, 204).Return(nil, fmt.Errorf("firewall service unavailable")).Once()
+			},
+			expectError: false, // VM update succeeds even though firewall failed
 		},
 	}
 
@@ -834,8 +939,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				var resources VMResources
 				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
 				require.NoError(t, err, "Should be able to unmarshal agent instance data")
-				assert.Equal(t, 200, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "200", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
+				assert.Equal(t, tt.expectedVMID, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, fmt.Sprintf("%d", tt.expectedVMID), *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}

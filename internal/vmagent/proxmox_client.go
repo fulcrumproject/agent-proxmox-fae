@@ -16,7 +16,11 @@ type ProxmoxClient interface {
 	DeleteVM(username string, vmid int) error
 	StartVM(username string, vmid int) error
 	StopVM(username string, vmid int) error
+
+	// Firewall management
 	AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error
+	GetVMFirewallRules(username string, vmid int) ([]FirewallRule, error)
+	DeleteVMFirewallRule(username string, vmid int, pos int) error
 }
 
 // PingResponse represents the response from the ping endpoint

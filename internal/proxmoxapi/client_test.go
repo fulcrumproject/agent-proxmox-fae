@@ -177,7 +177,7 @@ func TestClientVMLifecycle(t *testing.T) {
 		t.Logf("Available pools: %+v", resources.Pools)
 	}
 
-	// Step 4: Create VM from template
+	// Step 4: Create VM from template with network configuration and credentials
 	vmName := fmt.Sprintf("test-vm-%s", uuid.New().String()[:8])
 	vmReq := &vmagent.VmCreateFromTemplate{
 		Node:         selectedNode,
@@ -188,8 +188,16 @@ func TestClientVMLifecycle(t *testing.T) {
 		Sockets:      1,
 		Cores:        1,
 		Memory:       512,
-		DiskSize:     8,         // 8GB disk
-		IPAddress:    "0.0.0.0", // Use DHCP
+		DiskSize:     8, // 8GB disk
+		// Network configuration
+		IPAddress:    "172.30.173.103",
+		Netmask:      24,
+		Gateway:      "172.30.173.1",
+		Nameserver:   "1.1.1.1",
+		SearchDomain: "opiquad.it",
+		// Login credentials
+		LoginUser: "fulcrum",
+		LoginPass: "Fulcrum123!",
 	}
 
 	err = client.CreateVMFromTemplate(userID, vmReq)
@@ -197,6 +205,9 @@ func TestClientVMLifecycle(t *testing.T) {
 		t.Fatalf("CreateVMFromTemplate failed: %v", err)
 	}
 	t.Logf("Successfully created VM %d from template %d with name: %s", vmid, templateVMID, vmName)
+	t.Logf("  Network: IP=%s/%d, Gateway=%s, DNS=%s, SearchDomain=%s",
+		vmReq.IPAddress, vmReq.Netmask, vmReq.Gateway, vmReq.Nameserver, vmReq.SearchDomain)
+	t.Logf("  Login: User=%s", vmReq.LoginUser)
 
 	// Step 5: Wait for VM to be in stopped state after creation
 	if !waitForVMState(t, client, userID, vmid, "stopped", 30*time.Second) {
@@ -212,6 +223,61 @@ func TestClientVMLifecycle(t *testing.T) {
 	assert.Equal(t, vmid, vm.VMID, "VM ID should match")
 	assert.Equal(t, vmName, vm.Name, "VM name should match")
 	t.Logf("Retrieved VM: %+v", vm)
+
+	// Step 5.5: Add and test firewall rules
+	t.Logf("Adding firewall rules to VM %d", vmid)
+	firewallRules := []vmagent.FirewallRule{
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "22",
+			Comment: "Allow SSH",
+		},
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "80",
+			Comment: "Allow HTTP",
+		},
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "443",
+			Comment: "Allow HTTPS",
+		},
+		{
+			Type:    "in",
+			Proto:   "udp",
+			Action:  "ACCEPT",
+			Dport:   "53",
+			Comment: "Allow DNS",
+		},
+	}
+
+	// Add each firewall rule
+	for i, rule := range firewallRules {
+		err = client.AddVMFirewallRule(userID, vmid, &rule)
+		if err != nil {
+			t.Fatalf("AddVMFirewallRule failed for rule %d: %v", i, err)
+		}
+		t.Logf("  Added firewall rule %d: %s - %s", i+1, rule.Comment, rule.Action)
+	}
+
+	// Retrieve and verify firewall rules
+	retrievedRules, err := client.GetVMFirewallRules(userID, vmid)
+	if err != nil {
+		t.Fatalf("GetVMFirewallRules failed: %v", err)
+	}
+	t.Logf("Retrieved %d firewall rules:", len(retrievedRules))
+	for i, rule := range retrievedRules {
+		t.Logf("  Rule %d: Type=%s, Proto=%s, Action=%s, Dport=%s, Comment=%s",
+			i+1, rule.Type, rule.Proto, rule.Action, rule.Dport, rule.Comment)
+	}
+	assert.GreaterOrEqual(t, len(retrievedRules), len(firewallRules),
+		"Should have at least as many rules as we added")
 
 	// Step 6: Start VM
 	err = client.StartVM(userID, vmid)

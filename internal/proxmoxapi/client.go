@@ -472,12 +472,12 @@ func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnab
 }
 
 // GetVMFirewallRules retrieves the firewall rules for a VM
-func (c *Client) GetVMFirewallRules(username string, vmid int) ([]FirewallRule, error) {
-	var rules []FirewallRule
+func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.FirewallRule, error) {
+	var apiRules []FirewallRule
 
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
-		SetResult(&rules).
+		SetResult(&apiRules).
 		Get(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
 
 	if err != nil {
@@ -486,6 +486,21 @@ func (c *Client) GetVMFirewallRules(username string, vmid int) ([]FirewallRule, 
 
 	if resp.IsError() {
 		return nil, fmt.Errorf("get VM firewall rules request failed with status %d: %s", resp.StatusCode(), resp.String())
+	}
+
+	// Convert proxmoxapi.FirewallRule to vmagent.FirewallRule
+	rules := make([]vmagent.FirewallRule, len(apiRules))
+	for i, apiRule := range apiRules {
+		rules[i] = vmagent.FirewallRule{
+			Type:    apiRule.Type,
+			Proto:   apiRule.Proto,
+			Action:  apiRule.Action,
+			Source:  apiRule.Source,
+			Sport:   apiRule.Sport,
+			Dest:    apiRule.Dest,
+			Dport:   apiRule.Dport,
+			Comment: apiRule.Comment,
+		}
 	}
 
 	return rules, nil

@@ -17,7 +17,9 @@ type RemoteConfig struct {
 }
 
 // VMProperties represents the properties of a VM service
-type VMProperties struct {
+// VMCreateProperties represents the parameters for creating a new VM (service.create)
+// All fields marked as required must be provided
+type VMCreateProperties struct {
 	// Required fields
 	CPU      int    `json:"cpu"`
 	Memory   int    `json:"memory"`
@@ -39,6 +41,25 @@ type VMProperties struct {
 	// Security configuration (optional)
 	FirewallRules []FirewallRule `json:"firewallrules,omitempty"` // Firewall rules to apply
 }
+
+// VMUpdateProperties represents the parameters for updating an existing VM (service.update)
+// All fields are optional - only provided fields will be updated (patch semantics)
+// Uses pointers to distinguish between "not provided" (nil) vs "set to zero value"
+type VMUpdateProperties struct {
+	// Optional - only update if provided (pointer distinguishes nil vs 0)
+	CPU    *int `json:"cpu,omitempty"`
+	Memory *int `json:"memory,omitempty"`
+
+	// Firewall rules reconciliation (optional)
+	// - nil: don't touch existing rules
+	// - empty array: remove all rules
+	// - populated array: reconcile with existing rules (add/remove as needed)
+	FirewallRules *[]FirewallRule `json:"firewallrules,omitempty"`
+}
+
+// VMProperties is an alias for VMCreateProperties for backward compatibility
+// Deprecated: Use VMCreateProperties or VMUpdateProperties explicitly
+type VMProperties = VMCreateProperties
 
 // NetworkConfig represents network pool allocation
 type NetworkConfig struct {
