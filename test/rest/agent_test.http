@@ -1,5 +1,5 @@
 @baseUrl = http://localhost:3000/api/v1
-@adminToken = admin-test-token
+@adminToken = change-me
 
 ### Create Service Option Type for VM Templates
 # @name createTemplateOptionType
@@ -243,6 +243,21 @@ Content-Type: application/json
 GET {{baseUrl}}/service-options?providerId={{providerId}}
 Authorization: Bearer {{adminToken}}
 
+### Create Agent Type for Proxmox VMs
+# @name createAgentType
+POST {{baseUrl}}/agent-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Proxmox VM Agent {{$timestamp}}",
+    "serviceTypeIds": [
+        "{{serviceTypeId}}"
+    ]
+}
+
+@agentTypeId = {{createAgentType.response.body.$.id}}
+
 ### Create Service Pool Set for network configuration
 # @name createPoolSet
 POST {{baseUrl}}/service-pool-sets
@@ -272,74 +287,14 @@ Content-Type: application/json
 
 @poolId = {{createNetConfigPool.response.body.$.id}}
 
-### Add Pool Value 1 (172.30.173.100/24)
+### Add Pool Value
 POST {{baseUrl}}/service-pool-values
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
   "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.100/24",
-  "value": {
-    "ipaddress": "172.30.173.100",
-    "netmask": 24,
-    "gateway": "172.30.173.1"
-  }
-}
-
-### Add Pool Value 2 (172.30.173.101/24)
-POST {{baseUrl}}/service-pool-values
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.101/24",
-  "value": {
-    "ipaddress": "172.30.173.101",
-    "netmask": 24,
-    "gateway": "172.30.173.1"
-  }
-}
-
-### Add Pool Value 3 (172.30.173.102/24)
-POST {{baseUrl}}/service-pool-values
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.102/24",
-  "value": {
-    "ipaddress": "172.30.173.102",
-    "netmask": 24,
-    "gateway": "172.30.173.1"
-  }
-}
-
-### Add Pool Value 4 (172.30.173.103/24)
-POST {{baseUrl}}/service-pool-values
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.103/24",
-  "value": {
-    "ipaddress": "172.30.173.103",
-    "netmask": 24,
-    "gateway": "172.30.173.1"
-  }
-}
-
-### Add Pool Value 5 (172.30.173.104/24)
-POST {{baseUrl}}/service-pool-values
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-  "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.104/24",
+  "name": "172.30.173.104",
   "value": {
     "ipaddress": "172.30.173.104",
     "netmask": 24,
@@ -354,7 +309,7 @@ Authorization: Bearer {{adminToken}}
 
 {
     "name": "VM Agent",
-    "agentTypeId": "0195c3c6-4c7d-7e3c-b481-f276e17a7bec",
+    "agentTypeId": "{{agentTypeId}}",
     "providerId": "{{providerId}}",
     "servicePoolSetId": "{{poolSetId}}",
     "tags": ["gpu-{{$timestamp}}", "high-memory", "ssd-storage"],
