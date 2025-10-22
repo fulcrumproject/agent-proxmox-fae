@@ -10,7 +10,7 @@ type ProxmoxClient interface {
 	GetUserPools(username string) (*PveUserResources, error)
 
 	// VM management
-	CreateVM(username string, vmReq *VmCreation) error
+	CreateVMFromTemplate(username string, vmReq *VmCreateFromTemplate) error
 	GetVM(username string, vmid int) (*Vm, error)
 	PatchVM(username string, vmid int, patchReq *VmPatch) error
 	DeleteVM(username string, vmid int) error
@@ -66,17 +66,25 @@ type Vm struct {
 	Uptime    int64   `json:"uptime"`
 }
 
-// VmCreation represents the request for creating a new VM
-type VmCreation struct {
-	Node    string `json:"node"`
-	VMID    int    `json:"vmid"`
-	Name    string `json:"name"`
-	Pool    string `json:"pool"`
-	Sockets int    `json:"sockets"`
-	Cores   int    `json:"cores"`
-	Memory  int    `json:"memory"`
-	Disk    int    `json:"scsi0"` // Disk size in GB
-	Image   string `json:"ide2"`
+// VmCreateFromTemplate represents the request for creating a new VM from a template
+type VmCreateFromTemplate struct {
+	Node         string `json:"node"`
+	VMID         int    `json:"vmid"`
+	TemplateVMID int    `json:"templatevmid"`
+	Name         string `json:"name"`
+	Pool         string `json:"pool"`
+	Sockets      int    `json:"sockets"`
+	Cores        int    `json:"cores"`
+	Memory       int    `json:"memory"`
+	DiskSize     int    `json:"disksize"`
+	LoginUser    string `json:"loginuser,omitempty"`
+	LoginPass    string `json:"loginpass,omitempty"`
+	LoginSSHKey  string `json:"loginsshkey,omitempty"`
+	IPAddress    string `json:"ipaddress,omitempty"`
+	Netmask      int    `json:"netmask,omitempty"`
+	Gateway      string `json:"gateway,omitempty"`
+	Nameserver   string `json:"nameserver,omitempty"`
+	SearchDomain string `json:"searchdomain,omitempty"`
 }
 
 // VmPatch represents the request for patching a VM

@@ -86,16 +86,16 @@ func (_c *MockProxmoxClient_CreateUser_Call) RunAndReturn(run func(req *PveUserC
 	return _c
 }
 
-// CreateVM provides a mock function for the type MockProxmoxClient
-func (_mock *MockProxmoxClient) CreateVM(username string, vmReq *VmCreation) error {
+// CreateVMFromTemplate provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) CreateVMFromTemplate(username string, vmReq *VmCreateFromTemplate) error {
 	ret := _mock.Called(username, vmReq)
 
 	if len(ret) == 0 {
-		panic("no return value specified for CreateVM")
+		panic("no return value specified for CreateVMFromTemplate")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(string, *VmCreation) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(string, *VmCreateFromTemplate) error); ok {
 		r0 = returnFunc(username, vmReq)
 	} else {
 		r0 = ret.Error(0)
@@ -103,27 +103,27 @@ func (_mock *MockProxmoxClient) CreateVM(username string, vmReq *VmCreation) err
 	return r0
 }
 
-// MockProxmoxClient_CreateVM_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateVM'
-type MockProxmoxClient_CreateVM_Call struct {
+// MockProxmoxClient_CreateVMFromTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateVMFromTemplate'
+type MockProxmoxClient_CreateVMFromTemplate_Call struct {
 	*mock.Call
 }
 
-// CreateVM is a helper method to define mock.On call
+// CreateVMFromTemplate is a helper method to define mock.On call
 //   - username string
-//   - vmReq *VmCreation
-func (_e *MockProxmoxClient_Expecter) CreateVM(username interface{}, vmReq interface{}) *MockProxmoxClient_CreateVM_Call {
-	return &MockProxmoxClient_CreateVM_Call{Call: _e.mock.On("CreateVM", username, vmReq)}
+//   - vmReq *VmCreateFromTemplate
+func (_e *MockProxmoxClient_Expecter) CreateVMFromTemplate(username interface{}, vmReq interface{}) *MockProxmoxClient_CreateVMFromTemplate_Call {
+	return &MockProxmoxClient_CreateVMFromTemplate_Call{Call: _e.mock.On("CreateVMFromTemplate", username, vmReq)}
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) Run(run func(username string, vmReq *VmCreation)) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) Run(run func(username string, vmReq *VmCreateFromTemplate)) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
 			arg0 = args[0].(string)
 		}
-		var arg1 *VmCreation
+		var arg1 *VmCreateFromTemplate
 		if args[1] != nil {
-			arg1 = args[1].(*VmCreation)
+			arg1 = args[1].(*VmCreateFromTemplate)
 		}
 		run(
 			arg0,
@@ -133,12 +133,12 @@ func (_c *MockProxmoxClient_CreateVM_Call) Run(run func(username string, vmReq *
 	return _c
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) Return(err error) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) Return(err error) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) RunAndReturn(run func(username string, vmReq *VmCreation) error) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) RunAndReturn(run func(username string, vmReq *VmCreateFromTemplate) error) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Return(run)
 	return _c
 }

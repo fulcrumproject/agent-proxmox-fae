@@ -50,6 +50,17 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 	return func(ctx context.Context, job *agent.Job[VMProperties, VMProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM creation job", "jobID", job.ID, "service", job.Service.Name)
 
+		// Validate required fields
+		if job.Params.LoginUser == "" {
+			return nil, fmt.Errorf("loginuser is required")
+		}
+		if job.Params.LoginPass == "" && job.Params.LoginSSHKey == "" {
+			return nil, fmt.Errorf("at least one of loginpass or loginsshkey is required")
+		}
+		if job.Params.NetConfig == nil {
+			return nil, fmt.Errorf("netconfig is required")
+		}
+
 		// Extract user from job and create prefixed IDs
 		username, poolID := MakeUserIDs(job.Service.ConsumerID)
 
@@ -101,21 +112,48 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		}
 		poolName := userResources.Pools[0]
 
-		// Create VM configuration
-		vmConfig := &VmCreation{
-			Node:    nodeName,
-			VMID:    nextID,
-			Name:    vmName,
-			Pool:    poolName,
-			Sockets: 1,
-			Cores:   job.Params.CPU,
-			Memory:  job.Params.Memory,
-			Disk:    job.Params.Disk,
-			Image:   job.Params.Template, // TODO Phase 2: Switch to CreateVMFromTemplate
+		// Validate and select template
+		if len(userResources.Templates) == 0 {
+			slog.Error("No templates available for user", "user", username)
+			return nil, fmt.Errorf("no templates available for user %s", username)
 		}
 
-		// Create the VM
-		err = v.proxmoxClient.CreateVM(username, vmConfig)
+		// Find template by name matching user-specified template
+		var selectedTemplate *PveTemplate
+		for _, tmpl := range userResources.Templates {
+			if tmpl.Name == job.Params.Template {
+				selectedTemplate = &tmpl
+				break
+			}
+		}
+		if selectedTemplate == nil {
+			slog.Error("Template not found", "template", job.Params.Template, "user", username)
+			return nil, fmt.Errorf("template '%s' not found in available templates", job.Params.Template)
+		}
+
+		// Create VM configuration from template
+		vmReq := &VmCreateFromTemplate{
+			Node:         nodeName,
+			VMID:         nextID,
+			TemplateVMID: selectedTemplate.ID,
+			Name:         vmName,
+			Pool:         poolName,
+			Sockets:      1,
+			Cores:        job.Params.CPU,
+			Memory:       job.Params.Memory,
+			DiskSize:     job.Params.Disk,
+			LoginUser:    job.Params.LoginUser,
+			LoginPass:    job.Params.LoginPass,
+			LoginSSHKey:  job.Params.LoginSSHKey,
+			IPAddress:    job.Params.NetConfig.IPAddress,
+			Netmask:      job.Params.NetConfig.Netmask,
+			Gateway:      job.Params.NetConfig.Gateway,
+			Nameserver:   job.Params.Nameserver,
+			SearchDomain: job.Params.SearchDomain,
+		}
+
+		// Create the VM from template
+		err = v.proxmoxClient.CreateVMFromTemplate(username, vmReq)
 		if err != nil {
 			slog.Error("Failed to create VM", "vmid", nextID, "error", err)
 			return nil, fmt.Errorf("failed to create VM: %w", err)

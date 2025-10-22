@@ -179,7 +179,7 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	// Step 4: Create VM from template
 	vmName := fmt.Sprintf("test-vm-%s", uuid.New().String()[:8])
-	vmReq := &VmCreateFromTemplate{
+	vmReq := &vmagent.VmCreateFromTemplate{
 		Node:         selectedNode,
 		VMID:         vmid,
 		TemplateVMID: templateVMID,
