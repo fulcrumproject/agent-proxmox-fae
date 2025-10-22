@@ -295,9 +295,9 @@ Content-Type: application/json
 
 {
   "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.104",
+  "name": "172.30.173.105",
   "value": {
-    "ipaddress": "172.30.173.104",
+    "ipaddress": "172.30.173.105",
     "netmask": 24,
     "gateway": "172.30.173.1"
   }
@@ -402,29 +402,6 @@ Authorization: Bearer {{consumerToken}}
     }
 }
 
-### Create a minimal service (basic VM)
-# @name createService
-# Note: netconfig will be allocated from a service pool of type JSON
-POST {{baseUrl}}/services
-Authorization: Bearer {{consumerToken}}
-
-{
-    "name": "Proxmox-VM-{{uniqueTag}}",
-    "properties": {
-        "cpu": 1,
-        "memory": 512,
-        "disk": 8,
-        "template": "debian-13-template",
-        "loginuser": "fulcrum",
-        "loginsshkey": "{{testSSHKey}}"
-    },
-    "agentTags": ["{{uniqueTag}}"],
-    "serviceTypeId": "{{serviceTypeId}}",
-    "groupId": "{{serviceGroupId}}"
-}
-
-@serviceId = {{createService.response.body.$.id}}
-
 ### Create a fully configured VM with firewall rules
 # @name createServiceWithFirewall
 # Note: netconfig will be allocated from a service pool of type JSON
@@ -471,7 +448,7 @@ Authorization: Bearer {{consumerToken}}
     "groupId": "{{serviceGroupId}}"
 }
 
-@serviceId2 = {{createServiceWithFirewall.response.body.$.id}}
+@serviceId = {{createServiceWithFirewall.response.body.$.id}}
 
 ### Get a service by ID
 GET {{baseUrl}}/services/{{serviceId}}
@@ -522,8 +499,8 @@ Authorization: Bearer {{consumerToken}}
 
 {
     "properties": {
-        "cpu": 2,
-        "memory": 1024,
+        "cpu": 4,
+        "memory": 4096,
         "firewallrules": [
             {
                 "type": "in",
@@ -542,6 +519,22 @@ Authorization: Bearer {{consumerToken}}
         ]
     }
 }
+
+### Get a service by ID
+GET {{baseUrl}}/services/{{serviceId}}
+Authorization: Bearer {{consumerToken}}
+
+### Start Service
+POST {{baseUrl}}/services/{{serviceId}}/start
+Authorization: Bearer {{consumerToken}}
+
+### Get a service by ID
+GET {{baseUrl}}/services/{{serviceId}}
+Authorization: Bearer {{consumerToken}}
+
+### Stop Service
+POST {{baseUrl}}/services/{{serviceId}}/stop
+Authorization: Bearer {{consumerToken}}
 
 ### Get a service by ID
 GET {{baseUrl}}/services/{{serviceId}}

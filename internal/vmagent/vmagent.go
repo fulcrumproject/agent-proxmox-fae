@@ -118,11 +118,11 @@ func NewVMAgent(
 	stdAgent.OnHealth(vmAgent.HealthHandler())
 
 	// Register job handlers
-	stdAgent.OnJob("service.create", agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
-	stdAgent.OnJob("service.update", agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
-	stdAgent.OnJob("service.start", agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
-	stdAgent.OnJob("service.stop", agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
-	stdAgent.OnJob("service.delete", agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
+	stdAgent.OnJob("create", agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
+	stdAgent.OnJob("update", agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
+	stdAgent.OnJob("start", agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
+	stdAgent.OnJob("stop", agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
+	stdAgent.OnJob("delete", agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
 
 	// Register metrics reporter
 	stdAgent.OnMetrics(vmAgent.MetricsReporter())
