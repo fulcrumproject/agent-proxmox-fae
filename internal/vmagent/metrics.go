@@ -51,21 +51,77 @@ func (v *VMAgent) typedMetricsReporter() agent.MetricsReporter[VMProperties, VMR
 			memUsageRatio = float64(vm.Mem) / float64(vm.MaxMem)
 		}
 
-	metrics = append(metrics,
-		agent.MetricEntry{
-			TypeName:        "vm.cpu.usage",
-			Value:           cpuUsageRatio,
-			ResourceID:      strconv.Itoa(vmid),
-			AgentInstanceID: *service.AgentInstanceID,
-		},
+		// Calculate disk usage ratio (current/max)
+		var diskUsageRatio float64
+		if vm.MaxDisk > 0 {
+			diskUsageRatio = float64(vm.Disk) / float64(vm.MaxDisk)
+		}
 
-		agent.MetricEntry{
-			TypeName:        "vm.memory.usage",
-			Value:           memUsageRatio,
-			ResourceID:      strconv.Itoa(vmid),
-			AgentInstanceID: *service.AgentInstanceID,
-		},
-	)
+		metrics = append(metrics,
+			// CPU usage
+			agent.MetricEntry{
+				TypeName:        "vm.cpu.usage",
+				Value:           cpuUsageRatio,
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Memory usage
+			agent.MetricEntry{
+				TypeName:        "vm.memory.usage",
+				Value:           memUsageRatio,
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Disk usage
+			agent.MetricEntry{
+				TypeName:        "vm.disk.usage",
+				Value:           diskUsageRatio,
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Disk read throughput (bytes/sec - cumulative counter)
+			agent.MetricEntry{
+				TypeName:        "vm.disk.read",
+				Value:           float64(vm.DiskRead),
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Disk write throughput (bytes/sec - cumulative counter)
+			agent.MetricEntry{
+				TypeName:        "vm.disk.write",
+				Value:           float64(vm.DiskWrite),
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Network in throughput (bytes/sec - cumulative counter)
+			agent.MetricEntry{
+				TypeName:        "vm.network.in",
+				Value:           float64(vm.NetIn),
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Network out throughput (bytes/sec - cumulative counter)
+			agent.MetricEntry{
+				TypeName:        "vm.network.out",
+				Value:           float64(vm.NetOut),
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+
+			// Uptime (seconds)
+			agent.MetricEntry{
+				TypeName:        "vm.uptime",
+				Value:           float64(vm.Uptime),
+				ResourceID:      strconv.Itoa(vmid),
+				AgentInstanceID: *service.AgentInstanceID,
+			},
+		)
 
 		return metrics, nil
 	}

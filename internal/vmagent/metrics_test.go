@@ -29,17 +29,24 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				vm := &Vm{
-					VMID:   123,
-					Name:   "test-vm",
-					CPU:    0.5,
-					MaxCPU: 2.0,
-					Mem:    1024 * 1024 * 1024, // 1GB
-					MaxMem: 2048 * 1024 * 1024, // 2GB
+					VMID:      123,
+					Name:      "test-vm",
+					CPU:       0.5,
+					MaxCPU:    2.0,
+					Mem:       1024 * 1024 * 1024,      // 1GB
+					MaxMem:    2048 * 1024 * 1024,      // 2GB
+					Disk:      5 * 1024 * 1024 * 1024,  // 5GB
+					MaxDisk:   10 * 1024 * 1024 * 1024, // 10GB
+					DiskRead:  1024 * 1024,             // 1MB/s
+					DiskWrite: 512 * 1024,              // 512KB/s
+					NetIn:     2 * 1024 * 1024,         // 2MB/s
+					NetOut:    1 * 1024 * 1024,         // 1MB/s
+					Uptime:    3600,                    // 1 hour
 				}
 				mockClient.EXPECT().GetVM("testuser", 123).Return(vm, nil).Once()
 			},
 			expectError:     false,
-			expectedMetrics: 2,
+			expectedMetrics: 8,
 		},
 		{
 			name: "successful_metrics_zero_max_values",
@@ -50,17 +57,24 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				vm := &Vm{
-					VMID:   456,
-					Name:   "test-vm-zero",
-					CPU:    0.3,
-					MaxCPU: 0, // Zero max CPU should result in 0 ratio
-					Mem:    512 * 1024 * 1024,
-					MaxMem: 0, // Zero max memory should result in 0 ratio
+					VMID:      456,
+					Name:      "test-vm-zero",
+					CPU:       0.3,
+					MaxCPU:    0, // Zero max CPU should result in 0 ratio
+					Mem:       512 * 1024 * 1024,
+					MaxMem:    0, // Zero max memory should result in 0 ratio
+					Disk:      1024,
+					MaxDisk:   0, // Zero max disk should result in 0 ratio
+					DiskRead:  0,
+					DiskWrite: 0,
+					NetIn:     0,
+					NetOut:    0,
+					Uptime:    0,
 				}
 				mockClient.EXPECT().GetVM("testuser", 456).Return(vm, nil).Once()
 			},
 			expectError:     false,
-			expectedMetrics: 2,
+			expectedMetrics: 8,
 		},
 		{
 			name: "get_vm_fails",
@@ -153,24 +167,71 @@ func TestVMAgent_MetricsReporter(t *testing.T) {
 				require.Len(t, metrics, tt.expectedMetrics, "Expected number of metrics should match")
 
 				if tt.expectedMetrics > 0 {
+					vmidStr := (*tt.service.AgentInstanceID)
+
 					// Verify CPU usage metric
 					cpuMetric := findMetricByType(metrics, "vm.cpu.usage")
 					require.NotNil(t, cpuMetric, "CPU usage metric should be present")
 					assert.Equal(t, "vm.cpu.usage", cpuMetric.TypeName)
 					assert.IsType(t, float64(0), cpuMetric.Value)
+					assert.Equal(t, vmidStr, cpuMetric.ResourceID)
+					assert.Equal(t, vmidStr, cpuMetric.AgentInstanceID)
 
 					// Verify memory usage metric
 					memMetric := findMetricByType(metrics, "vm.memory.usage")
 					require.NotNil(t, memMetric, "Memory usage metric should be present")
 					assert.Equal(t, "vm.memory.usage", memMetric.TypeName)
 					assert.IsType(t, float64(0), memMetric.Value)
-
-					// Verify resource and agent instance IDs match
-					vmidStr := (*tt.service.AgentInstanceID)
-					assert.Equal(t, vmidStr, cpuMetric.ResourceID)
-					assert.Equal(t, vmidStr, cpuMetric.AgentInstanceID)
 					assert.Equal(t, vmidStr, memMetric.ResourceID)
 					assert.Equal(t, vmidStr, memMetric.AgentInstanceID)
+
+					// Verify disk usage metric
+					diskMetric := findMetricByType(metrics, "vm.disk.usage")
+					require.NotNil(t, diskMetric, "Disk usage metric should be present")
+					assert.Equal(t, "vm.disk.usage", diskMetric.TypeName)
+					assert.IsType(t, float64(0), diskMetric.Value)
+					assert.Equal(t, vmidStr, diskMetric.ResourceID)
+					assert.Equal(t, vmidStr, diskMetric.AgentInstanceID)
+
+					// Verify disk read metric
+					diskReadMetric := findMetricByType(metrics, "vm.disk.read")
+					require.NotNil(t, diskReadMetric, "Disk read metric should be present")
+					assert.Equal(t, "vm.disk.read", diskReadMetric.TypeName)
+					assert.IsType(t, float64(0), diskReadMetric.Value)
+					assert.Equal(t, vmidStr, diskReadMetric.ResourceID)
+					assert.Equal(t, vmidStr, diskReadMetric.AgentInstanceID)
+
+					// Verify disk write metric
+					diskWriteMetric := findMetricByType(metrics, "vm.disk.write")
+					require.NotNil(t, diskWriteMetric, "Disk write metric should be present")
+					assert.Equal(t, "vm.disk.write", diskWriteMetric.TypeName)
+					assert.IsType(t, float64(0), diskWriteMetric.Value)
+					assert.Equal(t, vmidStr, diskWriteMetric.ResourceID)
+					assert.Equal(t, vmidStr, diskWriteMetric.AgentInstanceID)
+
+					// Verify network in metric
+					netInMetric := findMetricByType(metrics, "vm.network.in")
+					require.NotNil(t, netInMetric, "Network in metric should be present")
+					assert.Equal(t, "vm.network.in", netInMetric.TypeName)
+					assert.IsType(t, float64(0), netInMetric.Value)
+					assert.Equal(t, vmidStr, netInMetric.ResourceID)
+					assert.Equal(t, vmidStr, netInMetric.AgentInstanceID)
+
+					// Verify network out metric
+					netOutMetric := findMetricByType(metrics, "vm.network.out")
+					require.NotNil(t, netOutMetric, "Network out metric should be present")
+					assert.Equal(t, "vm.network.out", netOutMetric.TypeName)
+					assert.IsType(t, float64(0), netOutMetric.Value)
+					assert.Equal(t, vmidStr, netOutMetric.ResourceID)
+					assert.Equal(t, vmidStr, netOutMetric.AgentInstanceID)
+
+					// Verify uptime metric
+					uptimeMetric := findMetricByType(metrics, "vm.uptime")
+					require.NotNil(t, uptimeMetric, "Uptime metric should be present")
+					assert.Equal(t, "vm.uptime", uptimeMetric.TypeName)
+					assert.IsType(t, float64(0), uptimeMetric.Value)
+					assert.Equal(t, vmidStr, uptimeMetric.ResourceID)
+					assert.Equal(t, vmidStr, uptimeMetric.AgentInstanceID)
 				}
 			}
 		})
