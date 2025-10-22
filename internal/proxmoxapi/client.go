@@ -492,10 +492,22 @@ func (c *Client) GetVMFirewallRules(username string, vmid int) ([]FirewallRule, 
 }
 
 // AddVMFirewallRule adds a firewall rule to a VM
-func (c *Client) AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error {
+func (c *Client) AddVMFirewallRule(username string, vmid int, rule *vmagent.FirewallRule) error {
+	// Convert vmagent.FirewallRule to proxmoxapi.FirewallRule
+	apiRule := &FirewallRule{
+		Type:    rule.Type,
+		Proto:   rule.Proto,
+		Action:  rule.Action,
+		Source:  rule.Source,
+		Sport:   rule.Sport,
+		Dest:    rule.Dest,
+		Dport:   rule.Dport,
+		Comment: rule.Comment,
+	}
+
 	resp, err := c.restyClient.R().
 		SetHeader("PVE-User", username).
-		SetBody(rule).
+		SetBody(apiRule).
 		Post(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
 
 	if err != nil {

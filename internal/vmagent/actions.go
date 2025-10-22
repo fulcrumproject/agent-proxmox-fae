@@ -152,15 +152,30 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 			SearchDomain: job.Params.SearchDomain,
 		}
 
-		// Create the VM from template
-		err = v.proxmoxClient.CreateVMFromTemplate(username, vmReq)
-		if err != nil {
-			slog.Error("Failed to create VM", "vmid", nextID, "error", err)
-			return nil, fmt.Errorf("failed to create VM: %w", err)
-		}
+	// Create the VM from template
+	err = v.proxmoxClient.CreateVMFromTemplate(username, vmReq)
+	if err != nil {
+		slog.Error("Failed to create VM", "vmid", nextID, "error", err)
+		return nil, fmt.Errorf("failed to create VM: %w", err)
+	}
 
-		slog.Info("Successfully created VM", "vmid", nextID, "name", job.Service.Name, "user", username)
-		return v.newJobResponse(nextID), nil
+	slog.Info("Successfully created VM", "vmid", nextID, "name", job.Service.Name, "user", username)
+
+	// Apply firewall rules if present (errors are logged but don't fail VM creation)
+	if len(job.Params.FirewallRules) > 0 {
+		slog.Info("Applying firewall rules", "vmid", nextID, "ruleCount", len(job.Params.FirewallRules))
+		for i, rule := range job.Params.FirewallRules {
+			err := v.proxmoxClient.AddVMFirewallRule(username, nextID, &rule)
+			if err != nil {
+				slog.Error("Failed to add firewall rule", "vmid", nextID, "ruleIndex", i, "rule", rule, "error", err)
+				// Continue to next rule - don't fail VM creation
+				continue
+			}
+			slog.Info("Successfully added firewall rule", "vmid", nextID, "ruleIndex", i, "comment", rule.Comment)
+		}
+	}
+
+	return v.newJobResponse(nextID), nil
 	}
 }
 

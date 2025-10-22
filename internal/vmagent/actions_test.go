@@ -541,6 +541,118 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 			expectError: true,
 			errorMsg:    "template 'nonexistent-template' not found",
 		},
+		{
+			name:         "successful_vm_creation_with_firewall_rules",
+			expectedVMID: 108,
+			job: &agent.RawJob{
+				ID: "test-job-13",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm-firewall",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      2,
+					Memory:   2048,
+					Disk:     30,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.110",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "admin",
+					LoginPass: "securepass",
+					FirewallRules: []FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "22",
+							Comment: "Allow SSH",
+						},
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "80,443",
+							Comment: "Allow HTTP/HTTPS",
+						},
+					},
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 108,
+					Nodes:    []string{"node1", "node2"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(108, 100, "test-vm-firewall", "pool1", 2, 2048, 30)).Return(nil).Once()
+				// Expect firewall rule calls
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 108, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "22" && rule.Comment == "Allow SSH"
+				})).Return(nil).Once()
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 108, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "80,443" && rule.Comment == "Allow HTTP/HTTPS"
+				})).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:         "vm_creation_firewall_failure_does_not_block",
+			expectedVMID: 109,
+			job: &agent.RawJob{
+				ID: "test-job-14",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm-firewall-fail",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   1024,
+					Disk:     20,
+					Template: "ubuntu-24.04",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.111",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "ubuntu",
+					LoginPass: "ubuntu123",
+					FirewallRules: []FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "8080",
+							Comment: "App port",
+						},
+					},
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 109,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(109, 101, "test-vm-firewall-fail", "pool1", 1, 1024, 20)).Return(nil).Once()
+				// Firewall rule fails but VM creation should still succeed
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 109, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "8080"
+				})).Return(fmt.Errorf("firewall API error")).Once()
+			},
+			expectError: false, // VM creation succeeds even though firewall failed
+		},
 	}
 
 	for _, tt := range tests {

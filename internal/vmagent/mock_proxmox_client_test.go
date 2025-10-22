@@ -35,6 +35,69 @@ func (_m *MockProxmoxClient) EXPECT() *MockProxmoxClient_Expecter {
 	return &MockProxmoxClient_Expecter{mock: &_m.Mock}
 }
 
+// AddVMFirewallRule provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error {
+	ret := _mock.Called(username, vmid, rule)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddVMFirewallRule")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string, int, *FirewallRule) error); ok {
+		r0 = returnFunc(username, vmid, rule)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProxmoxClient_AddVMFirewallRule_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddVMFirewallRule'
+type MockProxmoxClient_AddVMFirewallRule_Call struct {
+	*mock.Call
+}
+
+// AddVMFirewallRule is a helper method to define mock.On call
+//   - username string
+//   - vmid int
+//   - rule *FirewallRule
+func (_e *MockProxmoxClient_Expecter) AddVMFirewallRule(username interface{}, vmid interface{}, rule interface{}) *MockProxmoxClient_AddVMFirewallRule_Call {
+	return &MockProxmoxClient_AddVMFirewallRule_Call{Call: _e.mock.On("AddVMFirewallRule", username, vmid, rule)}
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) Run(run func(username string, vmid int, rule *FirewallRule)) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 *FirewallRule
+		if args[2] != nil {
+			arg2 = args[2].(*FirewallRule)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) Return(err error) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) RunAndReturn(run func(username string, vmid int, rule *FirewallRule) error) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateUser provides a mock function for the type MockProxmoxClient
 func (_mock *MockProxmoxClient) CreateUser(req *PveUserCreation) error {
 	ret := _mock.Called(req)
