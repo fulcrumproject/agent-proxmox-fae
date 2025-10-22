@@ -447,8 +447,8 @@ func (c *Client) CreateVM(username string, vmReq *vmagent.VmCreation) error {
 		Sockets:  vmReq.Sockets,
 		Cores:    vmReq.Cores,
 		Memory:   vmReq.Memory,
-		DiskSize: vmReq.SCSI0,
-		Image:    vmReq.IDE2,
+		DiskSize: vmReq.Disk,
+		Image:    vmReq.Image,
 	}
 
 	return c.CreateVMFromISO(username, isoReq)

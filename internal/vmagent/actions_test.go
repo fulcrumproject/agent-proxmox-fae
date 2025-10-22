@@ -20,7 +20,8 @@ var (
 )
 
 // Helper function to create a mock matcher for VmCreation that allows flexible node selection
-func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, image string) interface{} {
+// TODO Phase 2: Replace with matchVmCreateFromTemplate
+func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, template string) interface{} {
 	return mock.MatchedBy(func(vmCreation *VmCreation) bool {
 		return vmCreation.VMID == vmid &&
 			vmCreation.Name == name &&
@@ -28,8 +29,8 @@ func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, image
 			vmCreation.Sockets == 1 &&
 			vmCreation.Cores == cores &&
 			vmCreation.Memory == memory &&
-			vmCreation.SCSI0 == disk &&
-			vmCreation.IDE2 == image &&
+			vmCreation.Disk == disk &&
+			vmCreation.Image == template &&
 			// Allow any reasonable node name since it's randomly selected
 			vmCreation.Node != ""
 	})
@@ -139,10 +140,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
-					Disk:   20,
-					Image:  "debian-12-standard.iso",
+					CPU:      2,
+					Memory:   1024,
+					Disk:     20,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.100",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -153,7 +161,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				// Use MatchedBy to accept any node from the available nodes
-				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-12-standard.iso")).Return(nil).Once()
+				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-13")).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -166,10 +174,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -193,10 +208,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -219,10 +241,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -245,10 +274,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -258,7 +294,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Pools:    []string{"pool1"},
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
-				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine.iso")).Return(errors.New("insufficient resources")).Once()
+				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine-template")).Return(errors.New("insufficient resources")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to create VM",

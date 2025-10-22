@@ -75,8 +75,8 @@ type VmCreation struct {
 	Sockets int    `json:"sockets"`
 	Cores   int    `json:"cores"`
 	Memory  int    `json:"memory"`
-	SCSI0   int    `json:"scsi0"` // Disk size in GB
-	IDE2    string `json:"ide2"`
+	Disk    int    `json:"scsi0"` // Disk size in GB
+	Image   string `json:"ide2"`
 }
 
 // VmPatch represents the request for patching a VM

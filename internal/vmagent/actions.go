@@ -110,8 +110,8 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 			Sockets: 1,
 			Cores:   job.Params.CPU,
 			Memory:  job.Params.Memory,
-			SCSI0:   job.Params.Disk,
-			IDE2:    job.Params.Image, // ISO image or template
+			Disk:    job.Params.Disk,
+			Image:   job.Params.Template, // TODO Phase 2: Switch to CreateVMFromTemplate
 		}
 
 		// Create the VM
