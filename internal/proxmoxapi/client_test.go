@@ -117,6 +117,48 @@ func TestClientGetNodesMetrics(t *testing.T) {
 	}
 }
 
+func TestClientGetTemplates(t *testing.T) {
+	requireIntegrationTest(t)
+
+	client := setupTestClient(t)
+
+	// Create a test user to get access to templates
+	testUUID := uuid.New().String()
+	userID, poolID := vmagent.MakeUserIDs(testUUID)
+
+	userReq := &PveUserCreation{
+		UserID:        userID,
+		PoolID:        poolID,
+		ResetIfExists: false,
+	}
+
+	err := client.createPveUser(userReq)
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	t.Logf("Successfully created user with ID: %s", userID)
+
+	// Get user pools which includes templates
+	resources, err := client.GetUserPools(userID)
+	if err != nil {
+		t.Fatalf("GetUserPools failed: %v", err)
+	}
+
+	assert.NotNil(t, resources, "User resources should not be nil")
+	assert.NotNil(t, resources.Templates, "Templates should not be nil")
+
+	t.Logf("Retrieved %d templates:", len(resources.Templates))
+	for i, template := range resources.Templates {
+		t.Logf("  Template %d: ID=%d, Name=%s", i+1, template.ID, template.Name)
+		assert.NotZero(t, template.ID, "Template ID should not be zero")
+		assert.NotEmpty(t, template.Name, "Template name should not be empty")
+	}
+
+	if len(resources.Templates) == 0 {
+		t.Log("WARNING: No templates available in test environment")
+	}
+}
+
 func TestClientVMLifecycle(t *testing.T) {
 	requireIntegrationTest(t)
 

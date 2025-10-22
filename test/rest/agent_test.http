@@ -1,6 +1,187 @@
 @baseUrl = http://localhost:3000/api/v1
 @adminToken = admin-test-token
 
+### Create Service Option Type for VM Templates
+# @name createTemplateOptionType
+POST {{baseUrl}}/service-option-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "VM Template {{$timestamp}}",
+    "type": "vm_template_{{$timestamp}}",
+    "description": "Available VM templates for Proxmox VMs"
+}
+
+@templateOptionType = {{createTemplateOptionType.response.body.$.type}}
+
+### Create Proxmox VM Service Type
+# @name createServiceType
+POST {{baseUrl}}/service-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Proxmox VM",
+  "propertySchema": {
+    "cpu": {
+      "type": "integer",
+      "label": "CPU Cores",
+      "required": true,
+      "validators": [
+        { "type": "min", "value": 1 },
+        { "type": "max", "value": 32 }
+      ]
+    },
+    "memory": {
+      "type": "integer",
+      "label": "Memory (MB)",
+      "required": true,
+      "validators": [
+        { "type": "min", "value": 512 }
+      ]
+    },
+    "disk": {
+      "type": "integer",
+      "label": "Disk Size (GB)",
+      "required": true,
+      "validators": [
+        { "type": "min", "value": 8 }
+      ]
+    },
+    "template": {
+      "type": "string",
+      "label": "VM Template",
+      "required": true,
+      "validators": [
+        { "type": "serviceOption", "value": "{{templateOptionType}}" }
+      ]
+    },
+    "netconfig": {
+      "type": "json",
+      "label": "Network Configuration",
+      "source": "system",
+      "updatable": "never",
+      "servicePoolType": "netconfig"
+    },
+    "nameserver": {
+      "type": "string",
+      "label": "DNS Nameserver",
+      "required": false,
+      "validators": [
+        { "type": "pattern", "value": "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$" }
+      ]
+    },
+    "searchdomain": {
+      "type": "string",
+      "label": "DNS Search Domain",
+      "required": false
+    },
+    "loginuser": {
+      "type": "string",
+      "label": "Login Username",
+      "required": true
+    },
+    "loginpass": {
+      "type": "string",
+      "label": "Login Password",
+      "required": false,
+      "validators": [
+        { "type": "minLength", "value": 8 }
+      ]
+    },
+    "loginsshkey": {
+      "type": "string",
+      "label": "SSH Public Key",
+      "required": false
+    },
+    "firewallrules": {
+      "type": "array",
+      "label": "Firewall Rules",
+      "required": false,
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "required": true,
+            "validators": [
+              { "type": "enum", "value": ["in", "out"] }
+            ]
+          },
+          "proto": {
+            "type": "string",
+            "required": true,
+            "validators": [
+              { "type": "enum", "value": ["tcp", "udp"] }
+            ]
+          },
+          "action": {
+            "type": "string",
+            "required": true,
+            "validators": [
+              { "type": "enum", "value": ["ACCEPT", "DROP", "REJECT"] }
+            ]
+          },
+          "source": { "type": "string", "required": false },
+          "sport": { "type": "string", "required": false },
+          "dest": { "type": "string", "required": false },
+          "dport": { "type": "string", "required": false },
+          "comment": { "type": "string", "required": false }
+        }
+      }
+    }
+  },
+  "lifecycleSchema": {
+    "states": [
+      { "name": "New" },
+      { "name": "Stopped" },
+      { "name": "Started" },
+      { "name": "Deleted" }
+    ],
+    "actions": [
+      {
+        "name": "create",
+        "requestSchemaType": "properties",
+        "transitions": [
+          { "from": "New", "to": "Stopped" }
+        ]
+      },
+      {
+        "name": "start",
+        "transitions": [
+          { "from": "Stopped", "to": "Started" }
+        ]
+      },
+      {
+        "name": "stop",
+        "transitions": [
+          { "from": "Started", "to": "Stopped" }
+        ]
+      },
+      {
+        "name": "update",
+        "requestSchemaType": "properties",
+        "transitions": [
+          { "from": "Stopped", "to": "Stopped" }
+        ]
+      },
+      {
+        "name": "delete",
+        "transitions": [
+          { "from": "Stopped", "to": "Deleted" },
+          { "from": "Started", "to": "Deleted" }
+        ]
+      }
+    ],
+    "initialState": "New",
+    "terminalStates": ["Deleted"],
+    "runningStates": ["Started"]
+  }
+}
+
+@serviceTypeId = {{createServiceType.response.body.$.id}}
+
 ### Create a provider for testing
 # @name createProvider
 POST {{baseUrl}}/participants
@@ -13,7 +194,160 @@ Authorization: Bearer {{adminToken}}
 
 @providerId = {{createProvider.response.body.$.id}}
 
-### Create an agent with tags
+### Create Service Option - Debian 13 Template
+# @name createTemplateOption1
+POST {{baseUrl}}/service-options
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "providerId": "{{providerId}}",
+    "serviceOptionTypeId": "{{createTemplateOptionType.response.body.$.id}}",
+    "name": "Debian 13 Template",
+    "value": "debian-13-template",
+    "enabled": true,
+    "displayOrder": 1
+}
+
+### Create Service Option - Ubuntu 24.04 Template
+# @name createTemplateOption2
+POST {{baseUrl}}/service-options
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "providerId": "{{providerId}}",
+    "serviceOptionTypeId": "{{createTemplateOptionType.response.body.$.id}}",
+    "name": "Ubuntu 24.04 LTS Template",
+    "value": "ubuntu-24.04-template",
+    "enabled": true,
+    "displayOrder": 2
+}
+
+### Create Service Option - AlmaLinux 10 Template
+# @name createTemplateOption3
+POST {{baseUrl}}/service-options
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "providerId": "{{providerId}}",
+    "serviceOptionTypeId": "{{createTemplateOptionType.response.body.$.id}}",
+    "name": "AlmaLinux 10 Template",
+    "value": "almalinux-10-template",
+    "enabled": true,
+    "displayOrder": 3
+}
+
+### List service options for provider (verify they were created)
+GET {{baseUrl}}/service-options?providerId={{providerId}}
+Authorization: Bearer {{adminToken}}
+
+### Create Service Pool Set for network configuration
+# @name createPoolSet
+POST {{baseUrl}}/service-pool-sets
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Proxmox Network Pools {{$timestamp}}",
+  "providerId": "{{providerId}}"
+}
+
+@poolSetId = {{createPoolSet.response.body.$.id}}
+
+### Create Network Configuration Pool (JSON type)
+# @name createNetConfigPool
+POST {{baseUrl}}/service-pools
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Network Config Pool",
+  "type": "netconfig",
+  "propertyType": "json",
+  "generatorType": "list",
+  "servicePoolSetId": "{{poolSetId}}"
+}
+
+@poolId = {{createNetConfigPool.response.body.$.id}}
+
+### Add Pool Value 1 (172.30.173.100/24)
+POST {{baseUrl}}/service-pool-values
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "servicePoolId": "{{poolId}}",
+  "name": "172.30.173.100/24",
+  "value": {
+    "ipaddress": "172.30.173.100",
+    "netmask": 24,
+    "gateway": "172.30.173.1"
+  }
+}
+
+### Add Pool Value 2 (172.30.173.101/24)
+POST {{baseUrl}}/service-pool-values
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "servicePoolId": "{{poolId}}",
+  "name": "172.30.173.101/24",
+  "value": {
+    "ipaddress": "172.30.173.101",
+    "netmask": 24,
+    "gateway": "172.30.173.1"
+  }
+}
+
+### Add Pool Value 3 (172.30.173.102/24)
+POST {{baseUrl}}/service-pool-values
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "servicePoolId": "{{poolId}}",
+  "name": "172.30.173.102/24",
+  "value": {
+    "ipaddress": "172.30.173.102",
+    "netmask": 24,
+    "gateway": "172.30.173.1"
+  }
+}
+
+### Add Pool Value 4 (172.30.173.103/24)
+POST {{baseUrl}}/service-pool-values
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "servicePoolId": "{{poolId}}",
+  "name": "172.30.173.103/24",
+  "value": {
+    "ipaddress": "172.30.173.103",
+    "netmask": 24,
+    "gateway": "172.30.173.1"
+  }
+}
+
+### Add Pool Value 5 (172.30.173.104/24)
+POST {{baseUrl}}/service-pool-values
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "servicePoolId": "{{poolId}}",
+  "name": "172.30.173.104/24",
+  "value": {
+    "ipaddress": "172.30.173.104",
+    "netmask": 24,
+    "gateway": "172.30.173.1"
+  }
+}
+
+### Create an agent with tags and pool set
 # @name createAgent
 POST {{baseUrl}}/agents
 Authorization: Bearer {{adminToken}}
@@ -22,6 +356,7 @@ Authorization: Bearer {{adminToken}}
     "name": "VM Agent",
     "agentTypeId": "0195c3c6-4c7d-7e3c-b481-f276e17a7bec",
     "providerId": "{{providerId}}",
+    "servicePoolSetId": "{{poolSetId}}",
     "tags": ["gpu-{{$timestamp}}", "high-memory", "ssd-storage"],
     "configuration": {
         "proxmoxAPI": {
@@ -96,7 +431,7 @@ Authorization: Bearer {{consumerToken}}
 
 ### Validate service properties before creation
 # @name validateServiceProperties
-POST {{baseUrl}}/service-types/0195c3c8-69e5-7806-9598-8523c01ea54f/validate
+POST {{baseUrl}}/service-types/{{serviceTypeId}}/validate
 Authorization: Bearer {{consumerToken}}
 
 {
@@ -104,12 +439,15 @@ Authorization: Bearer {{consumerToken}}
         "cpu": 1,
         "memory": 512,
         "disk": 8,
-        "image": "alpine-standard-3.22.0-x86_64.iso"
+        "template": "debian-13-template",
+        "loginuser": "admin",
+        "loginpass": "SecurePass123!"
     }
 }
 
-### Create a new service using agent's unique tag for discovery
+### Create a minimal service (basic VM)
 # @name createService
+# Note: netconfig will be allocated from a service pool of type JSON
 POST {{baseUrl}}/services
 Authorization: Bearer {{consumerToken}}
 
@@ -119,14 +457,64 @@ Authorization: Bearer {{consumerToken}}
         "cpu": 1,
         "memory": 512,
         "disk": 8,
-        "image": "alpine-standard-3.22.0-x86_64.iso"
+        "template": "debian-13-template",
+        "loginuser": "admin",
+        "loginpass": "AdminPass123!"
     },
     "agentTags": ["{{uniqueTag}}"],
-    "serviceTypeId": "0195c3c8-69e5-7806-9598-8523c01ea54f",
+    "serviceTypeId": "{{serviceTypeId}}",
     "groupId": "{{serviceGroupId}}"
 }
 
 @serviceId = {{createService.response.body.$.id}}
+
+### Create a fully configured VM with firewall rules
+# @name createServiceWithFirewall
+# Note: netconfig will be allocated from a service pool of type JSON
+POST {{baseUrl}}/services
+Authorization: Bearer {{consumerToken}}
+
+{
+    "name": "Proxmox-VM-Configured-{{uniqueTag}}",
+    "properties": {
+        "cpu": 2,
+        "memory": 2048,
+        "disk": 20,
+        "template": "ubuntu-24.04-template",
+        "nameserver": "1.1.1.1",
+        "searchdomain": "opiquad.it",
+        "loginuser": "ubuntu",
+        "loginsshkey": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...",
+        "firewallrules": [
+            {
+                "type": "in",
+                "proto": "tcp",
+                "dport": "22",
+                "action": "ACCEPT",
+                "comment": "Allow SSH"
+            },
+            {
+                "type": "in",
+                "proto": "tcp",
+                "dport": "80",
+                "action": "ACCEPT",
+                "comment": "Allow HTTP"
+            },
+            {
+                "type": "in",
+                "proto": "tcp",
+                "dport": "443",
+                "action": "ACCEPT",
+                "comment": "Allow HTTPS"
+            }
+        ]
+    },
+    "agentTags": ["{{uniqueTag}}"],
+    "serviceTypeId": "{{serviceTypeId}}",
+    "groupId": "{{serviceGroupId}}"
+}
+
+@serviceId2 = {{createServiceWithFirewall.response.body.$.id}}
 
 ### Get a service by ID
 GET {{baseUrl}}/services/{{serviceId}}
@@ -148,16 +536,15 @@ Authorization: Bearer {{consumerToken}}
 GET {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{consumerToken}}
 
-### Hot update vm status (Unsupported)
+### Hot update vm status (Unsupported - VM must be stopped)
 PATCH {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{consumerToken}}
 
 {
     "properties": {
         "cpu": 8,
-        "memory": 1024,
-        "disk": 8,
-        "image": "alpine-standard-3.22.0-x86_64.iso"    }
+        "memory": 4096
+    }
 }
 
 ### Get a service by ID
@@ -172,7 +559,7 @@ Authorization: Bearer {{consumerToken}}
 GET {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{consumerToken}}
 
-### Cold update vm status
+### Cold update vm status (VM is stopped)
 PATCH {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{consumerToken}}
 
@@ -180,8 +567,22 @@ Authorization: Bearer {{consumerToken}}
     "properties": {
         "cpu": 2,
         "memory": 1024,
-        "disk": 8,
-        "image": "alpine-standard-3.22.0-x86_64.iso"
+        "firewallrules": [
+            {
+                "type": "in",
+                "proto": "tcp",
+                "dport": "22",
+                "action": "ACCEPT",
+                "comment": "Allow SSH"
+            },
+            {
+                "type": "in",
+                "proto": "tcp",
+                "dport": "3000",
+                "action": "ACCEPT",
+                "comment": "Allow App"
+            }
+        ]
     }
 }
 
