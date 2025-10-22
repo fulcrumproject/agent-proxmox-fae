@@ -1,0 +1,95 @@
+@baseUrl = http://localhost:3000/api/v1
+@adminToken = change-me
+
+### Create Metric Type - VM CPU Usage
+# @name createCPUMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.cpu.usage",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Memory Usage
+# @name createMemoryMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.memory.usage",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Disk Usage
+# @name createDiskUsageMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.disk.usage",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Disk Read
+# @name createDiskReadMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.disk.read",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Disk Write
+# @name createDiskWriteMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.disk.write",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Network In
+# @name createNetworkInMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.network.in",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Network Out
+# @name createNetworkOutMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.network.out",
+    "entityType": "Service"
+}
+
+### Create Metric Type - VM Uptime
+# @name createUptimeMetric
+POST {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "vm.uptime",
+    "entityType": "Service"
+}
+
+### List all metric types (verify they were created)
+GET {{baseUrl}}/metric-types
+Authorization: Bearer {{adminToken}}
+

@@ -184,11 +184,6 @@ func (v *VMAgent) UpdateVMHandler() agent.JobHandler[VMUpdateProperties, VMUpdat
 	return func(ctx context.Context, job *agent.Job[VMUpdateProperties, VMUpdateProperties, VMResources]) (*agent.JobResponse[VMResources], error) {
 		slog.Info("Processing VM update job", "jobID", job.ID, "service", job.Service.Name)
 
-		// If the VM is not stopped, return not supported
-		if job.Service.Status != agent.ServiceStatusStopped {
-			return nil, fmt.Errorf("unsupported: cannot update a VM in status %s", job.Service.Status)
-		}
-
 		// Extract user and VMID from job
 		username, _ := MakeUserIDs(job.Service.ConsumerID)
 		vmid := job.Service.AgentInstanceData.VMID
