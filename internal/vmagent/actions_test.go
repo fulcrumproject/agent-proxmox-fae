@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for consistent test user IDs
+const testConsumerID = "testuser"
+
+var (
+	testUserID, testPoolID = MakeUserIDs(testConsumerID)
+)
+
 // Helper function to create a mock matcher for VmCreation that allows flexible node selection
 func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, image string) interface{} {
 	return mock.MatchedBy(func(vmCreation *VmCreation) bool {
@@ -138,15 +145,15 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "debian-12-standard.iso",
 				}),
 			},
-		setupMock: func(mockClient *MockProxmoxClient) {
-			userResources := &PveUserResources{
-				NextVMID: 100,
-				Nodes:    []string{"node1", "node2"},
-				Pools:    []string{"pool1"},
-			}
-				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 100,
+					Nodes:    []string{"node1", "node2"},
+					Pools:    []string{"pool1"},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				// Use MatchedBy to accept any node from the available nodes
-				mockClient.EXPECT().CreateVM("testuser", matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-12-standard.iso")).Return(nil).Once()
+				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-12-standard.iso")).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -166,11 +173,11 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().GetUserPools("testuser").Return(nil, errors.New("user not found")).Once()
+				mockClient.EXPECT().GetUserPools(testUserID).Return(nil, errors.New("user not found")).Once()
 				// Expect CreateUser call since GetUserPools fails
 				mockClient.EXPECT().CreateUser(&PveUserCreation{
-					UserID:        "testuser",
-					PoolID:        "testuser",
+					UserID:        testUserID,
+					PoolID:        testPoolID,
 					ResetIfExists: false,
 				}).Return(errors.New("failed to create user")).Once()
 			},
@@ -192,13 +199,13 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-		setupMock: func(mockClient *MockProxmoxClient) {
-			userResources := &PveUserResources{
-				NextVMID: 101,
-				Nodes:    []string{}, // No nodes available
-				Pools:    []string{"pool1"},
-			}
-				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 101,
+					Nodes:    []string{}, // No nodes available
+					Pools:    []string{"pool1"},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 			},
 			expectError: true,
 			errorMsg:    "no nodes available for user",
@@ -218,13 +225,13 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-		setupMock: func(mockClient *MockProxmoxClient) {
-			userResources := &PveUserResources{
-				NextVMID: 102,
-				Nodes:    []string{"node1"},
-				Pools:    []string{}, // No pools available
-			}
-				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 102,
+					Nodes:    []string{"node1"},
+					Pools:    []string{}, // No pools available
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 			},
 			expectError: true,
 			errorMsg:    "no pools available for user",
@@ -244,14 +251,14 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Image:  "alpine.iso",
 				}),
 			},
-		setupMock: func(mockClient *MockProxmoxClient) {
-			userResources := &PveUserResources{
-				NextVMID: 103,
-				Nodes:    []string{"node1"},
-				Pools:    []string{"pool1"},
-			}
-				mockClient.EXPECT().GetUserPools("testuser").Return(userResources, nil).Once()
-				mockClient.EXPECT().CreateVM("testuser", matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine.iso")).Return(errors.New("insufficient resources")).Once()
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 103,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine.iso")).Return(errors.New("insufficient resources")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to create VM",
@@ -325,7 +332,7 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().PatchVM("testuser", 200, &VmPatch{
+				mockClient.EXPECT().PatchVM(testUserID, 200, &VmPatch{
 					Cores:  4,
 					Memory: 2048,
 				}).Return(nil).Once()
@@ -387,7 +394,7 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().PatchVM("testuser", 202, &VmPatch{
+				mockClient.EXPECT().PatchVM(testUserID, 202, &VmPatch{
 					Cores:  8,
 					Memory: 4096,
 				}).Return(errors.New("VM is locked")).Once()
@@ -463,7 +470,7 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().StartVM("testuser", 300).Return(nil).Once()
+				mockClient.EXPECT().StartVM(testUserID, 300).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -492,7 +499,7 @@ func TestVMAgent_StartVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().StartVM("testuser", 301).Return(errors.New("VM is already running")).Once()
+				mockClient.EXPECT().StartVM(testUserID, 301).Return(errors.New("VM is already running")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to start VM",
@@ -560,7 +567,7 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().StopVM("testuser", 400).Return(nil).Once()
+				mockClient.EXPECT().StopVM(testUserID, 400).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -589,7 +596,7 @@ func TestVMAgent_StopVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().StopVM("testuser", 401).Return(errors.New("VM is already stopped")).Once()
+				mockClient.EXPECT().StopVM(testUserID, 401).Return(errors.New("VM is already stopped")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to stop VM",
@@ -657,7 +664,7 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().DeleteVM("testuser", 500).Return(nil).Once()
+				mockClient.EXPECT().DeleteVM(testUserID, 500).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -686,7 +693,7 @@ func TestVMAgent_DeleteVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().DeleteVM("testuser", 501).Return(errors.New("VM has snapshots")).Once()
+				mockClient.EXPECT().DeleteVM(testUserID, 501).Return(errors.New("VM has snapshots")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to delete VM",

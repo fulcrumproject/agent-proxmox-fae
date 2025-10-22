@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 	"github.com/fulcrumproject/utils/confbuilder"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -53,9 +54,10 @@ func TestClientCreateAndGetUser(t *testing.T) {
 	client := setupTestClient(t)
 
 	testUUID := uuid.New().String()
+	userID, poolID := vmagent.MakeUserIDs(testUUID)
 	userReq := &PveUserCreation{
-		UserID:        testUUID,
-		PoolID:        testUUID,
+		UserID:        userID,
+		PoolID:        poolID,
 		ResetIfExists: false,
 	}
 
@@ -65,10 +67,10 @@ func TestClientCreateAndGetUser(t *testing.T) {
 		t.Logf("CreateUser returned error (may be expected): %v", err)
 		return // Skip the get test if create failed
 	}
-	t.Logf("Successfully created user with ID: %s", testUUID)
+	t.Logf("Successfully created user with ID: %s", userID)
 
 	// Get the user to verify it was created
-	user, err := client.GetUser(testUUID)
+	user, err := client.GetUser(userID)
 	if err != nil {
 		t.Logf("GetUser returned error (may be expected): %v", err)
 	} else {
@@ -77,7 +79,7 @@ func TestClientCreateAndGetUser(t *testing.T) {
 	}
 
 	// Get the user pools to verify user resources
-	pools, err := client.GetUserPools(testUUID)
+	pools, err := client.GetUserPools(userID)
 	if err != nil {
 		t.Logf("GetUserPools returned error (may be expected): %v", err)
 	} else {
@@ -122,9 +124,11 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	// Step 0: Create a test user first
 	testUUID := uuid.New().String()
+	userID, poolID := vmagent.MakeUserIDs(testUUID)
+
 	userReq := &PveUserCreation{
-		UserID:        testUUID,
-		PoolID:        testUUID,
+		UserID:        userID,
+		PoolID:        poolID,
 		ResetIfExists: false,
 	}
 
@@ -132,13 +136,10 @@ func TestClientVMLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
-	t.Logf("Successfully created user with ID: %s", testUUID)
-
-	// Use the created user for VM operations
-	testUser := testUUID
+	t.Logf("Successfully created user with ID: %s", userID)
 
 	// Step 1: Get user resources to determine available pools and next VM ID
-	resources, err := client.GetUserPools(testUser)
+	resources, err := client.GetUserPools(userID)
 	if err != nil {
 		t.Fatalf("GetUserPools failed after user creation: %v", err)
 	}
@@ -159,8 +160,6 @@ func TestClientVMLifecycle(t *testing.T) {
 	t.Logf("Randomly selected node: %s from %d available nodes", selectedNode, len(nodes))
 
 	// Step 3: Configure VM creation parameters using user pools
-	// Use the same pool ID as the user, with fallback to default
-	poolID := testUUID // Use the same UUID as pool ID
 
 	// Select a random template from available templates
 	if len(resources.Templates) == 0 {
@@ -193,19 +192,19 @@ func TestClientVMLifecycle(t *testing.T) {
 		IPAddress:    "0.0.0.0", // Use DHCP
 	}
 
-	err = client.CreateVMFromTemplate(testUser, vmReq)
+	err = client.CreateVMFromTemplate(userID, vmReq)
 	if err != nil {
 		t.Fatalf("CreateVMFromTemplate failed: %v", err)
 	}
 	t.Logf("Successfully created VM %d from template %d with name: %s", vmid, templateVMID, vmName)
 
 	// Step 5: Wait for VM to be in stopped state after creation
-	if !waitForVMState(t, client, testUser, vmid, "stopped", 30*time.Second) {
+	if !waitForVMState(t, client, userID, vmid, "stopped", 30*time.Second) {
 		t.Logf("VM did not reach stopped state after creation, continuing anyway...")
 	}
 
 	// Get VM to verify it was created and get current state
-	vm, err := client.GetVM(testUser, vmid)
+	vm, err := client.GetVM(userID, vmid)
 	if err != nil {
 		t.Fatalf("GetVM failed after creation: %v", err)
 	}
@@ -215,19 +214,19 @@ func TestClientVMLifecycle(t *testing.T) {
 	t.Logf("Retrieved VM: %+v", vm)
 
 	// Step 6: Start VM
-	err = client.StartVM(testUser, vmid)
+	err = client.StartVM(userID, vmid)
 	if err != nil {
 		t.Fatalf("StartVM failed: %v", err)
 	}
 	t.Logf("Successfully started VM %d", vmid)
 
 	// Wait for VM to be in running state
-	if !waitForVMState(t, client, testUser, vmid, "running", 60*time.Second) {
+	if !waitForVMState(t, client, userID, vmid, "running", 60*time.Second) {
 		t.Fatalf("VM did not reach running state after start")
 	}
 
 	// Step 6.5: Get detailed VM status and metrics
-	vmWithMetrics, err := client.GetVM(testUser, vmid)
+	vmWithMetrics, err := client.GetVM(userID, vmid)
 	if err != nil {
 		t.Fatalf("GetVM (with metrics) failed: %v", err)
 	}
@@ -244,7 +243,7 @@ func TestClientVMLifecycle(t *testing.T) {
 		Web:      false,
 	}
 
-	vncResp, err := client.OpenVNC(testUser, vmid, vncReq)
+	vncResp, err := client.OpenVNC(userID, vmid, vncReq)
 	if err != nil {
 		t.Logf("OpenVNC returned error (may be expected): %v", err)
 	} else {
@@ -253,26 +252,26 @@ func TestClientVMLifecycle(t *testing.T) {
 	}
 
 	// Step 8: Stop VM
-	err = client.StopVM(testUser, vmid)
+	err = client.StopVM(userID, vmid)
 	if err != nil {
 		t.Fatalf("StopVM failed: %v", err)
 	}
 	t.Logf("Successfully stopped VM %d", vmid)
 
 	// Wait for VM to be in stopped state
-	if !waitForVMState(t, client, testUser, vmid, "stopped", 60*time.Second) {
+	if !waitForVMState(t, client, userID, vmid, "stopped", 60*time.Second) {
 		t.Fatalf("VM did not reach stopped state after stop")
 	}
 
 	// Step 9: Delete VM
-	err = client.DeleteVM(testUser, vmid)
+	err = client.DeleteVM(userID, vmid)
 	if err != nil {
 		t.Fatalf("DeleteVM failed: %v", err)
 	}
 	t.Logf("Successfully deleted VM %d", vmid)
 
 	// Step 10: Wait for VM to be deleted and verify
-	if !waitForVMDeleted(t, client, testUser, vmid, 2*time.Minute) {
+	if !waitForVMDeleted(t, client, userID, vmid, 2*time.Minute) {
 		t.Fatalf("VM %d still exists after deletion timeout", vmid)
 	}
 	t.Logf("VM %d successfully deleted", vmid)

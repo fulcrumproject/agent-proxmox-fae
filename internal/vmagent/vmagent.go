@@ -2,6 +2,7 @@ package vmagent
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"time"
@@ -26,6 +27,12 @@ type VMProperties struct {
 // VMResources represents the resources in a job response
 type VMResources struct {
 	VMID int `json:"vmid"`
+}
+
+// MakeUserIDs creates prefixed user and pool IDs from a consumer ID
+// to ensure they start with a letter (required by Proxmox)
+func MakeUserIDs(consumerID string) (userID, poolID string) {
+	return fmt.Sprintf("user-%s", consumerID), fmt.Sprintf("pool-%s", consumerID)
 }
 
 type VMAgent struct {
