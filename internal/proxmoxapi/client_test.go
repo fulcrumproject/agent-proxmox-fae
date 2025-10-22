@@ -237,9 +237,9 @@ func TestClientVMLifecycle(t *testing.T) {
 		Gateway:      "172.30.173.1",
 		Nameserver:   "1.1.1.1",
 		SearchDomain: "opiquad.it",
-		// Login credentials
-		LoginUser: "fulcrum",
-		LoginPass: "Fulcrum123!",
+		// Login credentials (using test SSH key)
+		LoginUser:   "fulcrum",
+		LoginSSHKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum",
 	}
 
 	err = client.CreateVMFromTemplate(userID, vmReq)

@@ -1,5 +1,6 @@
 @baseUrl = http://localhost:3000/api/v1
 @adminToken = change-me
+@testSSHKey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum
 
 ### Create Service Option Type for VM Templates
 # @name createTemplateOptionType
@@ -316,7 +317,7 @@ Authorization: Bearer {{adminToken}}
     "configuration": {
         "proxmoxAPI": {
             "apiToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHAiOiJmdWxjcnVtLXRlc3QtMSIsInJvbGVzIjpbInB2ZS1hcGktZXh0ZW5zaW9uIl19.YoSSdPV-RSrzB9XuZ8lfOKnV30F6sgi8W4lFKO-jzyE",
-            "apiUrl": "https://172.30.232.7:5297",
+            "apiUrl": "https://172.30.173.230:5297",
             "insecureSkipTls": true,
             "timeout": 30,
             "debug": true
@@ -390,13 +391,14 @@ POST {{baseUrl}}/service-types/{{serviceTypeId}}/validate
 Authorization: Bearer {{consumerToken}}
 
 {
+    "providerId": "{{providerId}}",
     "properties": {
         "cpu": 1,
         "memory": 512,
         "disk": 8,
         "template": "debian-13-template",
-        "loginuser": "admin",
-        "loginpass": "SecurePass123!"
+        "loginuser": "fulcrum",
+        "loginsshkey": "{{testSSHKey}}"
     }
 }
 
@@ -413,8 +415,8 @@ Authorization: Bearer {{consumerToken}}
         "memory": 512,
         "disk": 8,
         "template": "debian-13-template",
-        "loginuser": "admin",
-        "loginpass": "AdminPass123!"
+        "loginuser": "fulcrum",
+        "loginsshkey": "{{testSSHKey}}"
     },
     "agentTags": ["{{uniqueTag}}"],
     "serviceTypeId": "{{serviceTypeId}}",
@@ -438,8 +440,8 @@ Authorization: Bearer {{consumerToken}}
         "template": "ubuntu-24.04-template",
         "nameserver": "1.1.1.1",
         "searchdomain": "opiquad.it",
-        "loginuser": "ubuntu",
-        "loginsshkey": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...",
+        "loginuser": "fulcrum",
+        "loginsshkey": "{{testSSHKey}}",
         "firewallrules": [
             {
                 "type": "in",
