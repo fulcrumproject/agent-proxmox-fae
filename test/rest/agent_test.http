@@ -304,7 +304,12 @@ Content-Type: application/json
   }
 }
 
+### Get Pool Values
+GET {{baseUrl}}/service-pool-values?servicePoolId={{poolId}}
+Authorization: Bearer {{adminToken}}
+
 ### Create an agent with tags and pool set
+### NOTE: Set proxmoxApiToken in settings rest-client.environmentVariables
 # @name createAgent
 POST {{baseUrl}}/agents
 Authorization: Bearer {{adminToken}}
@@ -317,7 +322,7 @@ Authorization: Bearer {{adminToken}}
     "tags": ["gpu-{{$timestamp}}", "high-memory", "ssd-storage"],
     "configuration": {
         "proxmoxAPI": {
-            "apiToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHAiOiJmdWxjcnVtLXRlc3QtMSIsInJvbGVzIjpbInB2ZS1hcGktZXh0ZW5zaW9uIl19.YoSSdPV-RSrzB9XuZ8lfOKnV30F6sgi8W4lFKO-jzyE",
+            "apiToken": "{{proxmoxApiToken}}",
             "apiUrl": "https://172.30.173.230:5297",
             "insecureSkipTls": true,
             "timeout": 30,
@@ -569,9 +574,6 @@ Authorization: Bearer {{consumerToken}}
 GET {{baseUrl}}/services
 Authorization: Bearer {{consumerToken}}
 
-### Retry Service Operation
-POST {{baseUrl}}/services/{{serviceId}}/retry
-Authorization: Bearer {{consumerToken}}
 
 
 

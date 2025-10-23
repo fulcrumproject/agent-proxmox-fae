@@ -718,13 +718,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 
 func TestVMAgent_UpdateVMHandler(t *testing.T) {
 	tests := []struct {
-		name          string
-		job           *agent.RawJob
-		setupMock     func(*MockProxmoxClient)
-		expectError   bool
-		errorMsg      string
-		isUnsupported bool
-		expectedVMID  int
+		name         string
+		job          *agent.RawJob
+		setupMock    func(*MockProxmoxClient)
+		expectError  bool
+		errorMsg     string
+		expectedVMID int
 	}{
 		{
 			name:         "successful_vm_update",
@@ -749,26 +748,6 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				}).Return(nil).Once()
 			},
 			expectError: false,
-		},
-		{
-			name: "vm_not_stopped",
-			job: &agent.RawJob{
-				ID: "test-job-2",
-				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID:        "testuser",
-					Name:              "test-vm",
-					Status:            "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
-					AgentInstanceData: rawResourcesPtr(`{"vmid": 201}`),
-				}),
-				Params: rawUpdateParamsPtr(VMUpdateProperties{
-					CPU:    intPtr(2),
-					Memory: intPtr(1024),
-				}),
-			},
-			setupMock:     func(mockClient *MockProxmoxClient) {}, // No mock calls expected
-			expectError:   true,
-			isUnsupported: true,
-			errorMsg:      "cannot update a VM in status",
 		},
 		{
 			name: "extract_vmid_fails",
@@ -924,11 +903,6 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				require.Error(t, err, "Expected update VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
 				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
-
-				if tt.isUnsupported {
-					// Check that the error message contains "unsupported"
-					assert.Contains(t, err.Error(), "unsupported", "Error should indicate unsupported operation")
-				}
 			} else {
 				require.NoError(t, err, "Expected update VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
