@@ -25,110 +25,182 @@ Content-Type: application/json
 {
   "name": "Proxmox VM {{$timestamp}}",
   "propertySchema": {
-    "cpu": {
-      "type": "integer",
-      "label": "CPU Cores",
-      "required": true,
-      "validators": [
-        { "type": "min", "value": 1 },
-        { "type": "max", "value": 32 }
-      ]
-    },
-    "memory": {
-      "type": "integer",
-      "label": "Memory (MB)",
-      "required": true,
-      "validators": [
-        { "type": "min", "value": 512 }
-      ]
-    },
-    "disk": {
-      "type": "integer",
-      "label": "Disk Size (GB)",
-      "required": true,
-      "validators": [
-        { "type": "min", "value": 8 }
-      ]
-    },
-    "template": {
-      "type": "string",
-      "label": "VM Template",
-      "required": true,
-      "validators": [
-        { "type": "serviceOption", "value": "{{templateOptionType}}" }
-      ]
-    },
-    "netconfig": {
-      "type": "json",
-      "label": "Network Configuration",
-      "source": "system",
-      "updatable": "never",
-      "servicePoolType": "netconfig"
-    },
-    "nameserver": {
-      "type": "string",
-      "label": "DNS Nameserver",
-      "required": false,
-      "validators": [
-        { "type": "pattern", "value": "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$" }
-      ]
-    },
-    "searchdomain": {
-      "type": "string",
-      "label": "DNS Search Domain",
-      "required": false
-    },
-    "loginuser": {
-      "type": "string",
-      "label": "Login Username",
-      "required": true
-    },
-    "loginpass": {
-      "type": "string",
-      "label": "Login Password",
-      "required": false,
-      "validators": [
-        { "type": "minLength", "value": 8 }
-      ]
-    },
-    "loginsshkey": {
-      "type": "string",
-      "label": "SSH Public Key",
-      "required": false
-    },
-    "firewallrules": {
-      "type": "array",
-      "label": "Firewall Rules",
-      "required": false,
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "required": true,
-            "validators": [
-              { "type": "enum", "value": ["in", "out"] }
-            ]
+    "properties": {
+      "cpu": {
+        "type": "integer",
+        "label": "CPU Cores",
+        "required": true,
+        "validators": [
+          {
+            "type": "min",
+            "config": {
+              "value": 1
+            }
           },
-          "proto": {
-            "type": "string",
-            "required": true,
-            "validators": [
-              { "type": "enum", "value": ["tcp", "udp"] }
-            ]
-          },
-          "action": {
-            "type": "string",
-            "required": true,
-            "validators": [
-              { "type": "enum", "value": ["ACCEPT", "DROP", "REJECT"] }
-            ]
-          },
-          "source": { "type": "string", "required": false },
-          "sport": { "type": "string", "required": false },
-          "dest": { "type": "string", "required": false },
-          "dport": { "type": "string", "required": false },
-          "comment": { "type": "string", "required": false }
+          {
+            "type": "max",
+            "config": {
+              "value": 32
+            }
+          }
+        ]
+      },
+      "memory": {
+        "type": "integer",
+        "label": "Memory (MB)",
+        "required": true,
+        "validators": [
+          {
+            "type": "min",
+            "config": {
+              "value": 512
+            }
+          }
+        ]
+      },
+      "disk": {
+        "type": "integer",
+        "label": "Disk Size (GB)",
+        "required": true,
+        "validators": [
+          {
+            "type": "min",
+            "config": {
+              "value": 8
+            }
+          }
+        ]
+      },
+      "template": {
+        "type": "string",
+        "label": "VM Template",
+        "required": true,
+        "validators": [
+          {
+            "type": "serviceOption",
+            "config": {
+              "value": "{{templateOptionType}}"
+            }
+          }
+        ]
+      },
+      "netconfig": {
+        "type": "json",
+        "label": "Network Configuration",
+        "immutable": true,
+        "authorizers": [
+          {
+            "type": "actor",
+            "config": {
+              "actors": ["system"]
+            }
+          }
+        ],
+        "generator": {
+          "type": "pool",
+          "config": {
+            "poolType": "netconfig"
+          }
+        }
+      },
+      "nameserver": {
+        "type": "string",
+        "label": "DNS Nameserver",
+        "required": false,
+        "validators": [
+          {
+            "type": "pattern",
+            "config": {
+              "pattern": "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$"
+            }
+          }
+        ]
+      },
+      "searchdomain": {
+        "type": "string",
+        "label": "DNS Search Domain",
+        "required": false
+      },
+      "loginuser": {
+        "type": "string",
+        "label": "Login Username",
+        "required": true
+      },
+      "loginpass": {
+        "type": "string",
+        "label": "Login Password",
+        "required": false,
+        "immutable": true,
+        "secret": {
+          "type": "ephemeral"
+        },
+        "validators": [
+          {
+            "type": "minLength",
+            "config": {
+              "value": 8
+            }
+          }
+        ]
+      },
+      "loginsshkey": {
+        "type": "string",
+        "label": "SSH Public Key",
+        "required": false,
+        "immutable": true,
+        "secret": {
+          "type": "ephemeral"
+        }
+      },
+      "firewallrules": {
+        "type": "array",
+        "label": "Firewall Rules",
+        "required": false,
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "required": true,
+              "validators": [
+                {
+                  "type": "enum",
+                  "config": {
+                    "values": ["in", "out"]
+                  }
+                }
+              ]
+            },
+            "proto": {
+              "type": "string",
+              "required": true,
+              "validators": [
+                {
+                  "type": "enum",
+                  "config": {
+                    "values": ["tcp", "udp"]
+                  }
+                }
+              ]
+            },
+            "action": {
+              "type": "string",
+              "required": true,
+              "validators": [
+                {
+                  "type": "enum",
+                  "config": {
+                    "values": ["ACCEPT", "DROP", "REJECT"]
+                  }
+                }
+              ]
+            },
+            "source": { "type": "string", "required": false },
+            "sport": { "type": "string", "required": false },
+            "dest": { "type": "string", "required": false },
+            "dport": { "type": "string", "required": false },
+            "comment": { "type": "string", "required": false }
+          }
         }
       }
     }
@@ -209,36 +281,6 @@ Content-Type: application/json
     "value": "debian-13-template",
     "enabled": true,
     "displayOrder": 1
-}
-
-### Create Service Option - Ubuntu 24.04 Template
-# @name createTemplateOption2
-POST {{baseUrl}}/service-options
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-    "providerId": "{{providerId}}",
-    "serviceOptionTypeId": "{{createTemplateOptionType.response.body.$.id}}",
-    "name": "Ubuntu 24.04 LTS Template",
-    "value": "ubuntu-24.04-template",
-    "enabled": true,
-    "displayOrder": 2
-}
-
-### Create Service Option - AlmaLinux 10 Template
-# @name createTemplateOption3
-POST {{baseUrl}}/service-options
-Authorization: Bearer {{adminToken}}
-Content-Type: application/json
-
-{
-    "providerId": "{{providerId}}",
-    "serviceOptionTypeId": "{{createTemplateOptionType.response.body.$.id}}",
-    "name": "AlmaLinux 10 Template",
-    "value": "almalinux-10-template",
-    "enabled": true,
-    "displayOrder": 3
 }
 
 ### List service options for provider (verify they were created)
@@ -325,7 +367,7 @@ Authorization: Bearer {{adminToken}}
             "apiToken": "{{proxmoxApiToken}}",
             "apiUrl": "https://172.30.173.230:5297",
             "insecureSkipTls": true,
-            "timeout": 30,
+            "timeout": 600,
             "debug": true
         }
    }
@@ -390,23 +432,6 @@ Authorization: Bearer {{consumerToken}}
 }
 
 @serviceGroupId = {{createServiceGroup.response.body.$.id}}
-
-### Validate service properties before creation
-# @name validateServiceProperties
-POST {{baseUrl}}/service-types/{{serviceTypeId}}/validate
-Authorization: Bearer {{consumerToken}}
-
-{
-    "providerId": "{{providerId}}",
-    "properties": {
-        "cpu": 1,
-        "memory": 512,
-        "disk": 8,
-        "template": "debian-13-template",
-        "loginuser": "fulcrum",
-        "loginsshkey": "{{testSSHKey}}"
-    }
-}
 
 ### Create a fully configured VM with firewall rules
 # @name createServiceWithFirewall
