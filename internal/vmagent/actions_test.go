@@ -213,13 +213,12 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
-				mockClient.EXPECT().GetUserPools(testUserID).Return(nil, errors.New("user not found")).Once()
-				// Expect CreateUser call since GetUserPools fails
-				mockClient.EXPECT().CreateUser(&PveUserCreation{
-					UserID:        testUserID,
-					PoolID:        testPoolID,
-					ResetIfExists: false,
-				}).Return(errors.New("failed to create user")).Once()
+			mockClient.EXPECT().GetUserPools(testUserID).Return(nil, errors.New("user not found")).Once()
+			// Expect CreateUser call since GetUserPools fails
+			mockClient.EXPECT().CreateUser(&PveUserCreation{
+				UserID: testUserID,
+				PoolID: testPoolID,
+			}).Return(errors.New("failed to create user")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to create user",

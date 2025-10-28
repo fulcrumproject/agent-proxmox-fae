@@ -25,9 +25,8 @@ type PveUser struct {
 
 // PveUserCreation represents the request for creating a new PVE user
 type PveUserCreation struct {
-	UserID        string `json:"userid"`
-	PoolID        string `json:"poolid"`
-	ResetIfExists bool   `json:"reset_if_exists"`
+	UserID string `json:"userid"`
+	PoolID string `json:"poolid"`
 }
 
 // NodesMetrics represents the metrics for all nodes
@@ -240,9 +239,8 @@ func (c *Client) Ping() (*vmagent.PingResponse, error) {
 func (c *Client) CreateUser(req *vmagent.PveUserCreation) error {
 	// Convert vmagent type to proxmoxapi type
 	proxmoxReq := &PveUserCreation{
-		UserID:        req.UserID,
-		PoolID:        req.PoolID,
-		ResetIfExists: req.ResetIfExists,
+		UserID: req.UserID,
+		PoolID: req.PoolID,
 	}
 
 	return c.createPveUser(proxmoxReq)

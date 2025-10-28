@@ -56,9 +56,8 @@ func TestClientCreateAndGetUser(t *testing.T) {
 	testUUID := uuid.New().String()
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 	userReq := &PveUserCreation{
-		UserID:        userID,
-		PoolID:        poolID,
-		ResetIfExists: false,
+		UserID: userID,
+		PoolID: poolID,
 	}
 
 	// Create the user
@@ -127,9 +126,8 @@ func TestClientGetTemplates(t *testing.T) {
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 
 	userReq := &PveUserCreation{
-		UserID:        userID,
-		PoolID:        poolID,
-		ResetIfExists: false,
+		UserID: userID,
+		PoolID: poolID,
 	}
 
 	err := client.createPveUser(userReq)
@@ -169,9 +167,8 @@ func TestClientVMLifecycle(t *testing.T) {
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 
 	userReq := &PveUserCreation{
-		UserID:        userID,
-		PoolID:        poolID,
-		ResetIfExists: false,
+		UserID: userID,
+		PoolID: poolID,
 	}
 
 	err := client.createPveUser(userReq)

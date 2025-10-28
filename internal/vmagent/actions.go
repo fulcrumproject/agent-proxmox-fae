@@ -69,12 +69,11 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		if err != nil {
 			slog.Info("User not found, attempting to create user", "user", username)
 
-			// Create user if it doesn't exist
-			userReq := &PveUserCreation{
-				UserID:        username,
-				PoolID:        poolID,
-				ResetIfExists: false,
-			}
+		// Create user if it doesn't exist
+		userReq := &PveUserCreation{
+			UserID: username,
+			PoolID: poolID,
+		}
 
 			createErr := v.proxmoxClient.CreateUser(userReq)
 			if createErr != nil {

@@ -31,9 +31,8 @@ type PingResponse struct {
 
 // PveUserCreation represents the request for creating a new PVE user
 type PveUserCreation struct {
-	UserID        string `json:"userid"`
-	PoolID        string `json:"poolid"`
-	ResetIfExists bool   `json:"reset_if_exists"`
+	UserID string `json:"userid"`
+	PoolID string `json:"poolid"`
 }
 
 // PveTemplate represents a VM template
