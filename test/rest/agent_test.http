@@ -445,7 +445,7 @@ Authorization: Bearer {{consumerToken}}
         "cpu": 2,
         "memory": 2048,
         "disk": 20,
-        "template": "ubuntu-24.04-template",
+        "template": "debian-13-template",
         "nameserver": "1.1.1.1",
         "searchdomain": "opiquad.it",
         "loginuser": "fulcrum",
