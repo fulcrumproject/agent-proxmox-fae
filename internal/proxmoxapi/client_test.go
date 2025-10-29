@@ -236,7 +236,6 @@ func TestClientVMLifecycle(t *testing.T) {
 		SearchDomain: "opiquad.it",
 		// Login credentials (using test SSH key)
 		LoginUser:   "fulcrum",
-		LoginPass:   "fulcrum",
 		LoginSSHKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum",
 	}
 
