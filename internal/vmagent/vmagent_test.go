@@ -63,7 +63,7 @@ func TestVMAgent_ConnectHandler_Success(t *testing.T) {
 	agentInfo := &agent.AgentInfo[RemoteConfig]{
 		Config: &RemoteConfig{
 			ProxmoxAPI: &config.ProxmoxAPIConfig{
-				APIURL:   "https://proxmox.example.com:8006",
+				APIURLs:  []string{"https://proxmox.example.com:8006"},
 				APIToken: "test-token-12345",
 			},
 		},

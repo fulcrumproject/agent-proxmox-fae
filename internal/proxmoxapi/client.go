@@ -3,6 +3,9 @@ package proxmoxapi
 import (
 	"crypto/tls"
 	"fmt"
+	"log/slog"
+	"math/rand"
+	"sync"
 	"time"
 
 	"resty.dev/v3"
@@ -11,9 +14,11 @@ import (
 	"github.com/fulcrumproject/agent-proxmox-fae/internal/vmagent"
 )
 
-// Client represents a REST client for the Proxmox API
+// Client represents a REST client for the Proxmox API with multi-endpoint support
 type Client struct {
 	restyClient *resty.Client
+	endpoints   []string     // Available API endpoints
+	mu          sync.RWMutex // Thread-safe access to endpoints
 }
 
 // PveUser represents a PVE user response
@@ -193,14 +198,22 @@ type VmStatusData struct {
 	Tags      string  `json:"tags"`      // VM tags
 }
 
-// NewClient creates a new Proxmox API REST client
+// NewClient creates a new Proxmox API REST client with multi-endpoint support
 func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
+	if len(cfg.APIURLs) == 0 {
+		panic("at least one API URL is required in apiUrls")
+	}
+
+	// Store endpoints (will be shuffled per-request for load balancing)
+	endpoints := make([]string, len(cfg.APIURLs))
+	copy(endpoints, cfg.APIURLs)
+
 	// Create a new resty client
 	restyClient := resty.New()
 
 	// Configure the client with settings from Proxmox config
+	// Note: BaseURL will be set per-request in executeWithFailover
 	restyClient.
-		SetBaseURL(cfg.APIURL).
 		SetHeader("Authorization", cfg.APIToken).
 		SetHeader("Content-Type", "application/json").
 		SetTimeout(time.Duration(cfg.Timeout) * time.Second).
@@ -211,25 +224,80 @@ func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 		InsecureSkipVerify: cfg.InsecureSkipTLS,
 	})
 
+	slog.Info("Initialized Proxmox client", "endpoints", endpoints)
+
 	return &Client{
 		restyClient: restyClient,
+		endpoints:   endpoints,
 	}
+}
+
+// executeWithFailover executes a request with automatic failover across all endpoints
+// Shuffles endpoints on each call for true random load balancing
+func (c *Client) executeWithFailover(operation string, reqFunc func(baseURL string) (*resty.Response, error)) (*resty.Response, error) {
+	// Copy and shuffle endpoints for this request
+	c.mu.RLock()
+	shuffled := make([]string, len(c.endpoints))
+	copy(shuffled, c.endpoints)
+	c.mu.RUnlock()
+
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	var lastErr error
+
+	// Try each endpoint in shuffled order
+	for attempt, endpoint := range shuffled {
+		resp, err := reqFunc(endpoint)
+
+		// Success
+		if err == nil && !resp.IsError() {
+			if attempt > 0 {
+				slog.Info("Request succeeded after failover",
+					"operation", operation,
+					"endpoint", endpoint,
+					"attempt", attempt+1)
+			}
+			return resp, nil
+		}
+
+		// Log failure
+		if err != nil {
+			lastErr = fmt.Errorf("%s: %w", operation, err)
+			slog.Warn("Request failed",
+				"operation", operation,
+				"endpoint", endpoint,
+				"error", err,
+				"attempt", attempt+1,
+				"total", len(shuffled))
+		} else {
+			lastErr = fmt.Errorf("%s failed with status %d", operation, resp.StatusCode())
+			slog.Warn("Request returned error status",
+				"operation", operation,
+				"endpoint", endpoint,
+				"status", resp.StatusCode(),
+				"body", resp.String(),
+				"attempt", attempt+1,
+				"total", len(shuffled))
+		}
+	}
+
+	return nil, fmt.Errorf("all %d Proxmox endpoints failed: %w", len(shuffled), lastErr)
 }
 
 // Ping calls the /ping endpoint to check API connectivity
 func (c *Client) Ping() (*vmagent.PingResponse, error) {
 	var pingResp vmagent.PingResponse
 
-	resp, err := c.restyClient.R().
-		SetResult(&pingResp).
-		Get("/ping")
+	_, err := c.executeWithFailover("ping", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetResult(&pingResp).
+			Get(baseURL + "/ping")
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to ping Proxmox API: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("ping request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &pingResp, nil
@@ -248,36 +316,28 @@ func (c *Client) CreateUser(req *vmagent.PveUserCreation) error {
 
 // createPveUser is the internal implementation using proxmoxapi types
 func (c *Client) createPveUser(req *PveUserCreation) error {
-	resp, err := c.restyClient.R().
-		SetBody(req).
-		Post("/fae/v1/pveuser")
+	_, err := c.executeWithFailover("createPveUser", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetBody(req).
+			Post(baseURL + "/fae/v1/pveuser")
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to create PVE user: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("create user request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // GetUser retrieves a PVE user by username
 func (c *Client) GetUser(username string) (*PveUser, error) {
 	var user PveUser
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetResult(&user).
-		Get("/fae/v1/pveuser")
+	_, err := c.executeWithFailover("getUser", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetResult(&user).
+			Get(baseURL + "/fae/v1/pveuser")
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get PVE user: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get user request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &user, nil
@@ -287,17 +347,15 @@ func (c *Client) GetUser(username string) (*PveUser, error) {
 func (c *Client) GetUserPools(username string) (*vmagent.PveUserResources, error) {
 	var resources vmagent.PveUserResources
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetResult(&resources).
-		Get("/fae/v1/pveuser/resources")
+	_, err := c.executeWithFailover("getUserPools", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetResult(&resources).
+			Get(baseURL + "/fae/v1/pveuser/resources")
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get PVE user pools: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get user pools request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &resources, nil
@@ -307,16 +365,14 @@ func (c *Client) GetUserPools(username string) (*vmagent.PveUserResources, error
 func (c *Client) GetNodes() ([]string, error) {
 	var nodes []string
 
-	resp, err := c.restyClient.R().
-		SetResult(&nodes).
-		Get("/fae/v1/nodes")
+	_, err := c.executeWithFailover("getNodes", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetResult(&nodes).
+			Get(baseURL + "/fae/v1/nodes")
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nodes: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get nodes request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return nodes, nil
@@ -326,16 +382,14 @@ func (c *Client) GetNodes() ([]string, error) {
 func (c *Client) GetNodesMetrics() (*NodesMetrics, error) {
 	var metrics NodesMetrics
 
-	resp, err := c.restyClient.R().
-		SetResult(&metrics).
-		Get("/fae/v1/nodes/metrics")
+	_, err := c.executeWithFailover("getNodesMetrics", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetResult(&metrics).
+			Get(baseURL + "/fae/v1/nodes/metrics")
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nodes metrics: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get nodes metrics request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &metrics, nil
@@ -343,37 +397,29 @@ func (c *Client) GetNodesMetrics() (*NodesMetrics, error) {
 
 // CreateVMFromTemplate creates a new virtual machine from a template
 func (c *Client) CreateVMFromTemplate(username string, vmReq *vmagent.VmCreateFromTemplate) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetBody(vmReq).
-		Post("/fae/v1/vms/create/from-template")
+	_, err := c.executeWithFailover("createVMFromTemplate", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetBody(vmReq).
+			Post(baseURL + "/fae/v1/vms/create/from-template")
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to create VM from template: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("create VM from template request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // GetVM retrieves a specific VM by ID
 func (c *Client) GetVM(username string, vmid int) (*vmagent.Vm, error) {
 	var vm vmagent.Vm
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetResult(&vm).
-		Get(fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	_, err := c.executeWithFailover("getVM", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetResult(&vm).
+			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get VM: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get VM request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &vm, nil
@@ -381,71 +427,47 @@ func (c *Client) GetVM(username string, vmid int) (*vmagent.Vm, error) {
 
 // PatchVM patches a virtual machine configuration
 func (c *Client) PatchVM(username string, vmid int, patchReq *vmagent.VmPatch) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetBody(patchReq).
-		Patch(fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	_, err := c.executeWithFailover("patchVM", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetBody(patchReq).
+			Patch(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to patch VM: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("patch VM request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // DeleteVM deletes a virtual machine
 func (c *Client) DeleteVM(username string, vmid int) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		Delete(fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	_, err := c.executeWithFailover("deleteVM", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			Delete(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to delete VM: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("delete VM request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // StartVM starts a virtual machine
 func (c *Client) StartVM(username string, vmid int) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		Get(fmt.Sprintf("/fae/v1/vms/%d/start", vmid))
+	_, err := c.executeWithFailover("startVM", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/start", vmid))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to start VM: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("start VM request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // StopVM stops a virtual machine
 func (c *Client) StopVM(username string, vmid int) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		Get(fmt.Sprintf("/fae/v1/vms/%d/stop", vmid))
+	_, err := c.executeWithFailover("stopVM", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/stop", vmid))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to stop VM: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("stop VM request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // WaitForVMState waits for a VM to reach a specific state with timeout
@@ -477,18 +499,16 @@ func (c *Client) WaitForVMState(username string, vmid int, expectedState string,
 func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnableResponse, error) {
 	var vncResp VncEnableResponse
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetBody(vncReq).
-		SetResult(&vncResp).
-		Post(fmt.Sprintf("/fae/v1/vms/%d/vnc", vmid))
+	_, err := c.executeWithFailover("openVNC", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetBody(vncReq).
+			SetResult(&vncResp).
+			Post(baseURL + fmt.Sprintf("/fae/v1/vms/%d/vnc", vmid))
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to open VNC: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("open VNC request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	return &vncResp, nil
@@ -498,17 +518,15 @@ func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnab
 func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.FirewallRule, error) {
 	var apiRules []FirewallRule
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetResult(&apiRules).
-		Get(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+	_, err := c.executeWithFailover("getVMFirewallRules", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetResult(&apiRules).
+			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get VM firewall rules: %w", err)
-	}
-
-	if resp.IsError() {
-		return nil, fmt.Errorf("get VM firewall rules request failed with status %d: %s", resp.StatusCode(), resp.String())
+		return nil, err
 	}
 
 	// Convert proxmoxapi.FirewallRule to vmagent.FirewallRule
@@ -543,35 +561,23 @@ func (c *Client) AddVMFirewallRule(username string, vmid int, rule *vmagent.Fire
 		Comment: rule.Comment,
 	}
 
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		SetBody(apiRule).
-		Post(fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+	_, err := c.executeWithFailover("addVMFirewallRule", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			SetBody(apiRule).
+			Post(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to add VM firewall rule: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("add VM firewall rule request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }
 
 // DeleteVMFirewallRule deletes a firewall rule from a VM
 func (c *Client) DeleteVMFirewallRule(username string, vmid int, pos int) error {
-	resp, err := c.restyClient.R().
-		SetHeader("PVE-User", username).
-		Delete(fmt.Sprintf("/fae/v1/vms/%d/firewall/%d", vmid, pos))
+	_, err := c.executeWithFailover("deleteVMFirewallRule", func(baseURL string) (*resty.Response, error) {
+		return c.restyClient.R().
+			SetHeader("PVE-User", username).
+			Delete(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall/%d", vmid, pos))
+	})
 
-	if err != nil {
-		return fmt.Errorf("failed to delete VM firewall rule: %w", err)
-	}
-
-	if resp.IsError() {
-		return fmt.Errorf("delete VM firewall rule request failed with status %d: %s", resp.StatusCode(), resp.String())
-	}
-
-	return nil
+	return err
 }

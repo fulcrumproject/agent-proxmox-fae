@@ -365,7 +365,10 @@ Authorization: Bearer {{adminToken}}
     "configuration": {
         "proxmoxAPI": {
             "apiToken": "{{proxmoxApiToken}}",
-            "apiUrl": "https://172.30.173.230:5297",
+            "apiUrls": [
+                "https://172.30.173.230:5297",
+                "https://172.30.173.231:5297"
+            ],
             "insecureSkipTls": true,
             "timeout": 600,
             "debug": true
