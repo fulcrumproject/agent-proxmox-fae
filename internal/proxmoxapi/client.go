@@ -448,6 +448,31 @@ func (c *Client) StopVM(username string, vmid int) error {
 	return nil
 }
 
+// WaitForVMState waits for a VM to reach a specific state with timeout
+// It checks both the status and that the VM is not locked (lock == false)
+func (c *Client) WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error {
+	start := time.Now()
+	pollInterval := 2 * time.Second
+
+	for time.Since(start) < timeout {
+		vm, err := c.GetVM(username, vmid)
+		if err != nil {
+			// If we can't get the VM, wait and retry
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		// Check if VM is in expected state and not locked
+		if vm.Status == expectedState && !vm.Lock {
+			return nil
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	return fmt.Errorf("timeout waiting for VM %d to reach state '%s' with lock=false after %v", vmid, expectedState, timeout)
+}
+
 // OpenVNC opens VNC access for a virtual machine
 func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnableResponse, error) {
 	var vncResp VncEnableResponse

@@ -5,6 +5,8 @@
 package vmagent
 
 import (
+	"time"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -752,6 +754,67 @@ func (_c *MockProxmoxClient_StopVM_Call) Return(err error) *MockProxmoxClient_St
 }
 
 func (_c *MockProxmoxClient_StopVM_Call) RunAndReturn(run func(username string, vmid int) error) *MockProxmoxClient_StopVM_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WaitForVMState provides a mock function with given fields: username, vmid, expectedState, timeout
+func (_mock *MockProxmoxClient) WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error {
+	ret := _mock.Called(username, vmid, expectedState, timeout)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WaitForVMState")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, int, string, time.Duration) error); ok {
+		r0 = rf(username, vmid, expectedState, timeout)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockProxmoxClient_WaitForVMState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForVMState'
+type MockProxmoxClient_WaitForVMState_Call struct {
+	*mock.Call
+}
+
+// WaitForVMState is a helper method to define mock.On call
+func (_e *MockProxmoxClient_Expecter) WaitForVMState(username interface{}, vmid interface{}, expectedState interface{}, timeout interface{}) *MockProxmoxClient_WaitForVMState_Call {
+	return &MockProxmoxClient_WaitForVMState_Call{Call: _e.mock.On("WaitForVMState", username, vmid, expectedState, timeout)}
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) Run(run func(username string, vmid int, expectedState string, timeout time.Duration)) *MockProxmoxClient_WaitForVMState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 time.Duration
+		if args[3] != nil {
+			arg3 = args[3].(time.Duration)
+		}
+		run(arg0, arg1, arg2, arg3)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) Return(err error) *MockProxmoxClient_WaitForVMState_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) RunAndReturn(run func(username string, vmid int, expectedState string, timeout time.Duration) error) *MockProxmoxClient_WaitForVMState_Call {
 	_c.Call.Return(run)
 	return _c
 }

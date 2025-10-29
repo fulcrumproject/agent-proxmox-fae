@@ -1,5 +1,7 @@
 package vmagent
 
+import "time"
+
 // ProxmoxClient defines the interface for interacting with Proxmox API
 type ProxmoxClient interface {
 	// Health and connectivity
@@ -16,6 +18,7 @@ type ProxmoxClient interface {
 	DeleteVM(username string, vmid int) error
 	StartVM(username string, vmid int) error
 	StopVM(username string, vmid int) error
+	WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error
 
 	// Firewall management
 	AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error
@@ -68,6 +71,7 @@ type Vm struct {
 	NetIn     int64   `json:"netin"`
 	NetOut    int64   `json:"netout"`
 	Uptime    int64   `json:"uptime"`
+	Lock      bool    `json:"lock"` // True for eg. when VM is migrating
 }
 
 // VmCreateFromTemplate represents the request for creating a new VM from a template

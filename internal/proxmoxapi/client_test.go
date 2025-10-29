@@ -236,6 +236,7 @@ func TestClientVMLifecycle(t *testing.T) {
 		SearchDomain: "opiquad.it",
 		// Login credentials (using test SSH key)
 		LoginUser:   "fulcrum",
+		LoginPass:   "fulcrum",
 		LoginSSHKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum",
 	}
 
@@ -261,6 +262,7 @@ func TestClientVMLifecycle(t *testing.T) {
 	assert.NotNil(t, vm, "VM should not be nil")
 	assert.Equal(t, vmid, vm.VMID, "VM ID should match")
 	assert.Equal(t, vmName, vm.Name, "VM name should match")
+	assert.False(t, vm.Lock, "VM should not be locked after creation")
 	t.Logf("Retrieved VM: %+v", vm)
 
 	// Step 5.5: Add and test firewall rules
@@ -386,26 +388,14 @@ func TestClientVMLifecycle(t *testing.T) {
 func waitForVMState(t *testing.T, client *Client, username string, vmid int, expectedState string, timeout time.Duration) bool {
 	t.Helper()
 
-	start := time.Now()
-	for time.Since(start) < timeout {
-		vm, err := client.GetVM(username, vmid)
-		if err != nil {
-			t.Logf("Error getting VM state: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		t.Logf("VM %d current state: %s (waiting for: %s)", vmid, vm.Status, expectedState)
-		if vm.Status == expectedState {
-			t.Logf("VM %d reached expected state: %s", vmid, expectedState)
-			return true
-		}
-
-		time.Sleep(2 * time.Second)
+	err := client.WaitForVMState(username, vmid, expectedState, timeout)
+	if err != nil {
+		t.Logf("Failed to wait for VM state: %v", err)
+		return false
 	}
 
-	t.Logf("Timeout waiting for VM %d to reach state: %s", vmid, expectedState)
-	return false
+	t.Logf("VM %d reached expected state: %s with lock: false", vmid, expectedState)
+	return true
 }
 
 // waitForVMDeleted waits for a VM to be deleted (GetVM returns an error) with timeout

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"strconv"
+	"time"
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
 )
@@ -69,11 +70,11 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		if err != nil {
 			slog.Info("User not found, attempting to create user", "user", username)
 
-		// Create user if it doesn't exist
-		userReq := &PveUserCreation{
-			UserID: username,
-			PoolID: poolID,
-		}
+			// Create user if it doesn't exist
+			userReq := &PveUserCreation{
+				UserID: username,
+				PoolID: poolID,
+			}
 
 			createErr := v.proxmoxClient.CreateUser(userReq)
 			if createErr != nil {
@@ -159,6 +160,15 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		}
 
 		slog.Info("Successfully created VM", "vmid", nextID, "name", job.Service.Name, "user", username)
+
+		// Wait for VM to be ready (in stopped state and not locked)
+		slog.Info("Waiting for VM to be ready", "vmid", nextID)
+		err = v.proxmoxClient.WaitForVMState(username, nextID, "stopped", 60*time.Second)
+		if err != nil {
+			slog.Error("Failed waiting for VM to be ready", "vmid", nextID, "error", err)
+			return nil, fmt.Errorf("VM created but failed to become ready: %w", err)
+		}
+		slog.Info("VM is ready", "vmid", nextID)
 
 		// Apply firewall rules if present (errors are logged but don't fail VM creation)
 		if len(job.Params.FirewallRules) > 0 {
