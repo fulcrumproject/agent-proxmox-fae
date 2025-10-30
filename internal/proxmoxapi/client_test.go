@@ -56,9 +56,8 @@ func TestClientCreateAndGetUser(t *testing.T) {
 	testUUID := uuid.New().String()
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 	userReq := &PveUserCreation{
-		UserID:        userID,
-		PoolID:        poolID,
-		ResetIfExists: false,
+		UserID: userID,
+		PoolID: poolID,
 	}
 
 	// Create the user
@@ -117,6 +116,47 @@ func TestClientGetNodesMetrics(t *testing.T) {
 	}
 }
 
+func TestClientGetTemplates(t *testing.T) {
+	requireIntegrationTest(t)
+
+	client := setupTestClient(t)
+
+	// Create a test user to get access to templates
+	testUUID := uuid.New().String()
+	userID, poolID := vmagent.MakeUserIDs(testUUID)
+
+	userReq := &PveUserCreation{
+		UserID: userID,
+		PoolID: poolID,
+	}
+
+	err := client.createPveUser(userReq)
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	t.Logf("Successfully created user with ID: %s", userID)
+
+	// Get user pools which includes templates
+	resources, err := client.GetUserPools(userID)
+	if err != nil {
+		t.Fatalf("GetUserPools failed: %v", err)
+	}
+
+	assert.NotNil(t, resources, "User resources should not be nil")
+	assert.NotNil(t, resources.Templates, "Templates should not be nil")
+
+	t.Logf("Retrieved %d templates:", len(resources.Templates))
+	for i, template := range resources.Templates {
+		t.Logf("  Template %d: ID=%d, Name=%s", i+1, template.ID, template.Name)
+		assert.NotZero(t, template.ID, "Template ID should not be zero")
+		assert.NotEmpty(t, template.Name, "Template name should not be empty")
+	}
+
+	if len(resources.Templates) == 0 {
+		t.Log("WARNING: No templates available in test environment")
+	}
+}
+
 func TestClientVMLifecycle(t *testing.T) {
 	requireIntegrationTest(t)
 
@@ -127,9 +167,8 @@ func TestClientVMLifecycle(t *testing.T) {
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 
 	userReq := &PveUserCreation{
-		UserID:        userID,
-		PoolID:        poolID,
-		ResetIfExists: false,
+		UserID: userID,
+		PoolID: poolID,
 	}
 
 	err := client.createPveUser(userReq)
@@ -177,9 +216,9 @@ func TestClientVMLifecycle(t *testing.T) {
 		t.Logf("Available pools: %+v", resources.Pools)
 	}
 
-	// Step 4: Create VM from template
+	// Step 4: Create VM from template with network configuration and credentials
 	vmName := fmt.Sprintf("test-vm-%s", uuid.New().String()[:8])
-	vmReq := &VmCreateFromTemplate{
+	vmReq := &vmagent.VmCreateFromTemplate{
 		Node:         selectedNode,
 		VMID:         vmid,
 		TemplateVMID: templateVMID,
@@ -188,8 +227,16 @@ func TestClientVMLifecycle(t *testing.T) {
 		Sockets:      1,
 		Cores:        1,
 		Memory:       512,
-		DiskSize:     8,         // 8GB disk
-		IPAddress:    "0.0.0.0", // Use DHCP
+		DiskSize:     8, // 8GB disk
+		// Network configuration
+		IPAddress:    "172.30.173.103",
+		Netmask:      24,
+		Gateway:      "172.30.173.1",
+		Nameserver:   "1.1.1.1",
+		SearchDomain: "opiquad.it",
+		// Login credentials (using test SSH key)
+		LoginUser:   "fulcrum",
+		LoginSSHKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum",
 	}
 
 	err = client.CreateVMFromTemplate(userID, vmReq)
@@ -197,6 +244,9 @@ func TestClientVMLifecycle(t *testing.T) {
 		t.Fatalf("CreateVMFromTemplate failed: %v", err)
 	}
 	t.Logf("Successfully created VM %d from template %d with name: %s", vmid, templateVMID, vmName)
+	t.Logf("  Network: IP=%s/%d, Gateway=%s, DNS=%s, SearchDomain=%s",
+		vmReq.IPAddress, vmReq.Netmask, vmReq.Gateway, vmReq.Nameserver, vmReq.SearchDomain)
+	t.Logf("  Login: User=%s", vmReq.LoginUser)
 
 	// Step 5: Wait for VM to be in stopped state after creation
 	if !waitForVMState(t, client, userID, vmid, "stopped", 30*time.Second) {
@@ -211,7 +261,63 @@ func TestClientVMLifecycle(t *testing.T) {
 	assert.NotNil(t, vm, "VM should not be nil")
 	assert.Equal(t, vmid, vm.VMID, "VM ID should match")
 	assert.Equal(t, vmName, vm.Name, "VM name should match")
+	assert.False(t, vm.Lock, "VM should not be locked after creation")
 	t.Logf("Retrieved VM: %+v", vm)
+
+	// Step 5.5: Add and test firewall rules
+	t.Logf("Adding firewall rules to VM %d", vmid)
+	firewallRules := []vmagent.FirewallRule{
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "22",
+			Comment: "Allow SSH",
+		},
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "80",
+			Comment: "Allow HTTP",
+		},
+		{
+			Type:    "in",
+			Proto:   "tcp",
+			Action:  "ACCEPT",
+			Dport:   "443",
+			Comment: "Allow HTTPS",
+		},
+		{
+			Type:    "in",
+			Proto:   "udp",
+			Action:  "ACCEPT",
+			Dport:   "53",
+			Comment: "Allow DNS",
+		},
+	}
+
+	// Add each firewall rule
+	for i, rule := range firewallRules {
+		err = client.AddVMFirewallRule(userID, vmid, &rule)
+		if err != nil {
+			t.Fatalf("AddVMFirewallRule failed for rule %d: %v", i, err)
+		}
+		t.Logf("  Added firewall rule %d: %s - %s", i+1, rule.Comment, rule.Action)
+	}
+
+	// Retrieve and verify firewall rules
+	retrievedRules, err := client.GetVMFirewallRules(userID, vmid)
+	if err != nil {
+		t.Fatalf("GetVMFirewallRules failed: %v", err)
+	}
+	t.Logf("Retrieved %d firewall rules:", len(retrievedRules))
+	for i, rule := range retrievedRules {
+		t.Logf("  Rule %d: Type=%s, Proto=%s, Action=%s, Dport=%s, Comment=%s",
+			i+1, rule.Type, rule.Proto, rule.Action, rule.Dport, rule.Comment)
+	}
+	assert.GreaterOrEqual(t, len(retrievedRules), len(firewallRules),
+		"Should have at least as many rules as we added")
 
 	// Step 6: Start VM
 	err = client.StartVM(userID, vmid)
@@ -281,26 +387,14 @@ func TestClientVMLifecycle(t *testing.T) {
 func waitForVMState(t *testing.T, client *Client, username string, vmid int, expectedState string, timeout time.Duration) bool {
 	t.Helper()
 
-	start := time.Now()
-	for time.Since(start) < timeout {
-		vm, err := client.GetVM(username, vmid)
-		if err != nil {
-			t.Logf("Error getting VM state: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		t.Logf("VM %d current state: %s (waiting for: %s)", vmid, vm.Status, expectedState)
-		if vm.Status == expectedState {
-			t.Logf("VM %d reached expected state: %s", vmid, expectedState)
-			return true
-		}
-
-		time.Sleep(2 * time.Second)
+	err := client.WaitForVMState(username, vmid, expectedState, timeout)
+	if err != nil {
+		t.Logf("Failed to wait for VM state: %v", err)
+		return false
 	}
 
-	t.Logf("Timeout waiting for VM %d to reach state: %s", vmid, expectedState)
-	return false
+	t.Logf("VM %d reached expected state: %s with lock: false", vmid, expectedState)
+	return true
 }
 
 // waitForVMDeleted waits for a VM to be deleted (GetVM returns an error) with timeout

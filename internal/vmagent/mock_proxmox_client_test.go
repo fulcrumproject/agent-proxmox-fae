@@ -5,6 +5,8 @@
 package vmagent
 
 import (
+	"time"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -33,6 +35,69 @@ type MockProxmoxClient_Expecter struct {
 
 func (_m *MockProxmoxClient) EXPECT() *MockProxmoxClient_Expecter {
 	return &MockProxmoxClient_Expecter{mock: &_m.Mock}
+}
+
+// AddVMFirewallRule provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error {
+	ret := _mock.Called(username, vmid, rule)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddVMFirewallRule")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string, int, *FirewallRule) error); ok {
+		r0 = returnFunc(username, vmid, rule)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProxmoxClient_AddVMFirewallRule_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddVMFirewallRule'
+type MockProxmoxClient_AddVMFirewallRule_Call struct {
+	*mock.Call
+}
+
+// AddVMFirewallRule is a helper method to define mock.On call
+//   - username string
+//   - vmid int
+//   - rule *FirewallRule
+func (_e *MockProxmoxClient_Expecter) AddVMFirewallRule(username interface{}, vmid interface{}, rule interface{}) *MockProxmoxClient_AddVMFirewallRule_Call {
+	return &MockProxmoxClient_AddVMFirewallRule_Call{Call: _e.mock.On("AddVMFirewallRule", username, vmid, rule)}
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) Run(run func(username string, vmid int, rule *FirewallRule)) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 *FirewallRule
+		if args[2] != nil {
+			arg2 = args[2].(*FirewallRule)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) Return(err error) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_AddVMFirewallRule_Call) RunAndReturn(run func(username string, vmid int, rule *FirewallRule) error) *MockProxmoxClient_AddVMFirewallRule_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // CreateUser provides a mock function for the type MockProxmoxClient
@@ -86,16 +151,16 @@ func (_c *MockProxmoxClient_CreateUser_Call) RunAndReturn(run func(req *PveUserC
 	return _c
 }
 
-// CreateVM provides a mock function for the type MockProxmoxClient
-func (_mock *MockProxmoxClient) CreateVM(username string, vmReq *VmCreation) error {
+// CreateVMFromTemplate provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) CreateVMFromTemplate(username string, vmReq *VmCreateFromTemplate) error {
 	ret := _mock.Called(username, vmReq)
 
 	if len(ret) == 0 {
-		panic("no return value specified for CreateVM")
+		panic("no return value specified for CreateVMFromTemplate")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(string, *VmCreation) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(string, *VmCreateFromTemplate) error); ok {
 		r0 = returnFunc(username, vmReq)
 	} else {
 		r0 = ret.Error(0)
@@ -103,27 +168,27 @@ func (_mock *MockProxmoxClient) CreateVM(username string, vmReq *VmCreation) err
 	return r0
 }
 
-// MockProxmoxClient_CreateVM_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateVM'
-type MockProxmoxClient_CreateVM_Call struct {
+// MockProxmoxClient_CreateVMFromTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateVMFromTemplate'
+type MockProxmoxClient_CreateVMFromTemplate_Call struct {
 	*mock.Call
 }
 
-// CreateVM is a helper method to define mock.On call
+// CreateVMFromTemplate is a helper method to define mock.On call
 //   - username string
-//   - vmReq *VmCreation
-func (_e *MockProxmoxClient_Expecter) CreateVM(username interface{}, vmReq interface{}) *MockProxmoxClient_CreateVM_Call {
-	return &MockProxmoxClient_CreateVM_Call{Call: _e.mock.On("CreateVM", username, vmReq)}
+//   - vmReq *VmCreateFromTemplate
+func (_e *MockProxmoxClient_Expecter) CreateVMFromTemplate(username interface{}, vmReq interface{}) *MockProxmoxClient_CreateVMFromTemplate_Call {
+	return &MockProxmoxClient_CreateVMFromTemplate_Call{Call: _e.mock.On("CreateVMFromTemplate", username, vmReq)}
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) Run(run func(username string, vmReq *VmCreation)) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) Run(run func(username string, vmReq *VmCreateFromTemplate)) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
 			arg0 = args[0].(string)
 		}
-		var arg1 *VmCreation
+		var arg1 *VmCreateFromTemplate
 		if args[1] != nil {
-			arg1 = args[1].(*VmCreation)
+			arg1 = args[1].(*VmCreateFromTemplate)
 		}
 		run(
 			arg0,
@@ -133,12 +198,12 @@ func (_c *MockProxmoxClient_CreateVM_Call) Run(run func(username string, vmReq *
 	return _c
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) Return(err error) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) Return(err error) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockProxmoxClient_CreateVM_Call) RunAndReturn(run func(username string, vmReq *VmCreation) error) *MockProxmoxClient_CreateVM_Call {
+func (_c *MockProxmoxClient_CreateVMFromTemplate_Call) RunAndReturn(run func(username string, vmReq *VmCreateFromTemplate) error) *MockProxmoxClient_CreateVMFromTemplate_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -196,6 +261,69 @@ func (_c *MockProxmoxClient_DeleteVM_Call) Return(err error) *MockProxmoxClient_
 }
 
 func (_c *MockProxmoxClient_DeleteVM_Call) RunAndReturn(run func(username string, vmid int) error) *MockProxmoxClient_DeleteVM_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteVMFirewallRule provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) DeleteVMFirewallRule(username string, vmid int, pos int) error {
+	ret := _mock.Called(username, vmid, pos)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteVMFirewallRule")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(string, int, int) error); ok {
+		r0 = returnFunc(username, vmid, pos)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProxmoxClient_DeleteVMFirewallRule_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteVMFirewallRule'
+type MockProxmoxClient_DeleteVMFirewallRule_Call struct {
+	*mock.Call
+}
+
+// DeleteVMFirewallRule is a helper method to define mock.On call
+//   - username string
+//   - vmid int
+//   - pos int
+func (_e *MockProxmoxClient_Expecter) DeleteVMFirewallRule(username interface{}, vmid interface{}, pos interface{}) *MockProxmoxClient_DeleteVMFirewallRule_Call {
+	return &MockProxmoxClient_DeleteVMFirewallRule_Call{Call: _e.mock.On("DeleteVMFirewallRule", username, vmid, pos)}
+}
+
+func (_c *MockProxmoxClient_DeleteVMFirewallRule_Call) Run(run func(username string, vmid int, pos int)) *MockProxmoxClient_DeleteVMFirewallRule_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_DeleteVMFirewallRule_Call) Return(err error) *MockProxmoxClient_DeleteVMFirewallRule_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_DeleteVMFirewallRule_Call) RunAndReturn(run func(username string, vmid int, pos int) error) *MockProxmoxClient_DeleteVMFirewallRule_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -326,6 +454,74 @@ func (_c *MockProxmoxClient_GetVM_Call) Return(vm *Vm, err error) *MockProxmoxCl
 }
 
 func (_c *MockProxmoxClient_GetVM_Call) RunAndReturn(run func(username string, vmid int) (*Vm, error)) *MockProxmoxClient_GetVM_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetVMFirewallRules provides a mock function for the type MockProxmoxClient
+func (_mock *MockProxmoxClient) GetVMFirewallRules(username string, vmid int) ([]FirewallRule, error) {
+	ret := _mock.Called(username, vmid)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetVMFirewallRules")
+	}
+
+	var r0 []FirewallRule
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(string, int) ([]FirewallRule, error)); ok {
+		return returnFunc(username, vmid)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string, int) []FirewallRule); ok {
+		r0 = returnFunc(username, vmid)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]FirewallRule)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(string, int) error); ok {
+		r1 = returnFunc(username, vmid)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProxmoxClient_GetVMFirewallRules_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetVMFirewallRules'
+type MockProxmoxClient_GetVMFirewallRules_Call struct {
+	*mock.Call
+}
+
+// GetVMFirewallRules is a helper method to define mock.On call
+//   - username string
+//   - vmid int
+func (_e *MockProxmoxClient_Expecter) GetVMFirewallRules(username interface{}, vmid interface{}) *MockProxmoxClient_GetVMFirewallRules_Call {
+	return &MockProxmoxClient_GetVMFirewallRules_Call{Call: _e.mock.On("GetVMFirewallRules", username, vmid)}
+}
+
+func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Run(run func(username string, vmid int)) *MockProxmoxClient_GetVMFirewallRules_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Return(firewallRules []FirewallRule, err error) *MockProxmoxClient_GetVMFirewallRules_Call {
+	_c.Call.Return(firewallRules, err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_GetVMFirewallRules_Call) RunAndReturn(run func(username string, vmid int) ([]FirewallRule, error)) *MockProxmoxClient_GetVMFirewallRules_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -558,6 +754,67 @@ func (_c *MockProxmoxClient_StopVM_Call) Return(err error) *MockProxmoxClient_St
 }
 
 func (_c *MockProxmoxClient_StopVM_Call) RunAndReturn(run func(username string, vmid int) error) *MockProxmoxClient_StopVM_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// WaitForVMState provides a mock function with given fields: username, vmid, expectedState, timeout
+func (_mock *MockProxmoxClient) WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error {
+	ret := _mock.Called(username, vmid, expectedState, timeout)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WaitForVMState")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, int, string, time.Duration) error); ok {
+		r0 = rf(username, vmid, expectedState, timeout)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockProxmoxClient_WaitForVMState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForVMState'
+type MockProxmoxClient_WaitForVMState_Call struct {
+	*mock.Call
+}
+
+// WaitForVMState is a helper method to define mock.On call
+func (_e *MockProxmoxClient_Expecter) WaitForVMState(username interface{}, vmid interface{}, expectedState interface{}, timeout interface{}) *MockProxmoxClient_WaitForVMState_Call {
+	return &MockProxmoxClient_WaitForVMState_Call{Call: _e.mock.On("WaitForVMState", username, vmid, expectedState, timeout)}
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) Run(run func(username string, vmid int, expectedState string, timeout time.Duration)) *MockProxmoxClient_WaitForVMState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 time.Duration
+		if args[3] != nil {
+			arg3 = args[3].(time.Duration)
+		}
+		run(arg0, arg1, arg2, arg3)
+	})
+	return _c
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) Return(err error) *MockProxmoxClient_WaitForVMState_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProxmoxClient_WaitForVMState_Call) RunAndReturn(run func(username string, vmid int, expectedState string, timeout time.Duration) error) *MockProxmoxClient_WaitForVMState_Call {
 	_c.Call.Return(run)
 	return _c
 }

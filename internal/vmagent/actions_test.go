@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
@@ -19,19 +20,19 @@ var (
 	testUserID, testPoolID = MakeUserIDs(testConsumerID)
 )
 
-// Helper function to create a mock matcher for VmCreation that allows flexible node selection
-func matchVmCreation(vmid int, name, pool string, cores, memory, disk int, image string) interface{} {
-	return mock.MatchedBy(func(vmCreation *VmCreation) bool {
-		return vmCreation.VMID == vmid &&
-			vmCreation.Name == name &&
-			vmCreation.Pool == pool &&
-			vmCreation.Sockets == 1 &&
-			vmCreation.Cores == cores &&
-			vmCreation.Memory == memory &&
-			vmCreation.SCSI0 == disk &&
-			vmCreation.IDE2 == image &&
+// Helper function to create a mock matcher for VmCreateFromTemplate that allows flexible node selection
+func matchVmCreateFromTemplate(vmid, templateID int, name, pool string, cores, memory, disk int) interface{} {
+	return mock.MatchedBy(func(vmReq *VmCreateFromTemplate) bool {
+		return vmReq.VMID == vmid &&
+			vmReq.TemplateVMID == templateID &&
+			vmReq.Name == name &&
+			vmReq.Pool == pool &&
+			vmReq.Sockets == 1 &&
+			vmReq.Cores == cores &&
+			vmReq.Memory == memory &&
+			vmReq.DiskSize == disk &&
 			// Allow any reasonable node name since it's randomly selected
-			vmCreation.Node != ""
+			vmReq.Node != ""
 	})
 }
 
@@ -43,6 +44,25 @@ func rawParamsPtr(props VMProperties) *json.RawMessage {
 	}
 	raw := json.RawMessage(data)
 	return &raw
+}
+
+// Helper function to create raw params from VMUpdateProperties
+func rawUpdateParamsPtr(props VMUpdateProperties) *json.RawMessage {
+	data, err := json.Marshal(props)
+	if err != nil {
+		panic(err) // This should never happen in tests
+	}
+	raw := json.RawMessage(data)
+	return &raw
+}
+
+// Helper functions to create pointers for test data
+func intPtr(v int) *int {
+	return &v
+}
+
+func firewallRulesPtr(rules []FirewallRule) *[]FirewallRule {
+	return &rules
 }
 
 func TestExtractUserAndVMID(t *testing.T) {
@@ -124,14 +144,16 @@ func TestVMAgent_NewJobResponse(t *testing.T) {
 
 func TestVMAgent_CreateVMHandler(t *testing.T) {
 	tests := []struct {
-		name        string
-		job         *agent.RawJob
-		setupMock   func(*MockProxmoxClient)
-		expectError bool
-		errorMsg    string
+		name         string
+		job          *agent.RawJob
+		setupMock    func(*MockProxmoxClient)
+		expectError  bool
+		errorMsg     string
+		expectedVMID int
 	}{
 		{
-			name: "successful_vm_creation",
+			name:         "successful_vm_creation",
+			expectedVMID: 100,
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
@@ -139,10 +161,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
-					Disk:   20,
-					Image:  "debian-12-standard.iso",
+					CPU:      2,
+					Memory:   1024,
+					Disk:     20,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.100",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -150,10 +179,15 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					NextVMID: 100,
 					Nodes:    []string{"node1", "node2"},
 					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				// Use MatchedBy to accept any node from the available nodes
-				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(100, "test-vm", "pool1", 2, 1024, 20, "debian-12-standard.iso")).Return(nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(100, 100, "test-vm", "pool1", 2, 1024, 20)).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMState(testUserID, 100, "stopped", mock.Anything).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -166,19 +200,25 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().GetUserPools(testUserID).Return(nil, errors.New("user not found")).Once()
 				// Expect CreateUser call since GetUserPools fails
 				mockClient.EXPECT().CreateUser(&PveUserCreation{
-					UserID:        testUserID,
-					PoolID:        testPoolID,
-					ResetIfExists: false,
+					UserID: testUserID,
+					PoolID: testPoolID,
 				}).Return(errors.New("failed to create user")).Once()
 			},
 			expectError: true,
@@ -193,10 +233,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -204,6 +251,9 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					NextVMID: 101,
 					Nodes:    []string{}, // No nodes available
 					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "alpine-template"},
+					},
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 			},
@@ -219,10 +269,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -230,6 +287,9 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					NextVMID: 102,
 					Nodes:    []string{"node1"},
 					Pools:    []string{}, // No pools available
+					Templates: []PveTemplate{
+						{ID: 100, Name: "alpine-template"},
+					},
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 			},
@@ -245,10 +305,17 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					Name:       "test-vm",
 				}),
 				Params: rawParamsPtr(VMProperties{
-					CPU:    1,
-					Memory: 512,
-					Disk:   10,
-					Image:  "alpine.iso",
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "alpine-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -256,12 +323,358 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 					NextVMID: 103,
 					Nodes:    []string{"node1"},
 					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "alpine-template"},
+					},
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
-				mockClient.EXPECT().CreateVM(testUserID, matchVmCreation(103, "test-vm", "pool1", 1, 512, 10, "alpine.iso")).Return(errors.New("insufficient resources")).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(103, 100, "test-vm", "pool1", 1, 512, 10)).Return(errors.New("insufficient resources")).Once()
 			},
 			expectError: true,
 			errorMsg:    "failed to create VM",
+		},
+		{
+			name: "validation_missing_loginuser",
+			job: &agent.RawJob{
+				ID: "test-job-6",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "", // Missing
+					LoginPass: "testpass123",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				// No mocks needed - validation happens before API calls
+			},
+			expectError: true,
+			errorMsg:    "loginuser is required",
+		},
+		{
+			name: "validation_missing_login_credentials",
+			job: &agent.RawJob{
+				ID: "test-job-7",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser:   "testuser",
+					LoginPass:   "", // Missing
+					LoginSSHKey: "", // Missing
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				// No mocks needed - validation happens before API calls
+			},
+			expectError: true,
+			errorMsg:    "at least one of loginpass or loginsshkey is required",
+		},
+		{
+			name: "validation_missing_netconfig",
+			job: &agent.RawJob{
+				ID: "test-job-8",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:       1,
+					Memory:    512,
+					Disk:      10,
+					Template:  "debian-13",
+					NetConfig: nil, // Missing
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				// No mocks needed - validation happens before API calls
+			},
+			expectError: true,
+			errorMsg:    "netconfig is required",
+		},
+		{
+			name:         "validation_loginuser_with_sshkey",
+			expectedVMID: 104,
+			job: &agent.RawJob{
+				ID: "test-job-9",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser:   "testuser",
+					LoginSSHKey: "ssh-rsa AAAAB3NzaC1yc2E...",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 104,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(104, 100, "test-vm", "pool1", 1, 512, 10)).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMState(testUserID, 104, "stopped", mock.Anything).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:         "validation_loginuser_with_both_pass_and_sshkey",
+			expectedVMID: 105,
+			job: &agent.RawJob{
+				ID: "test-job-10",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser:   "testuser",
+					LoginPass:   "testpass123",
+					LoginSSHKey: "ssh-rsa AAAAB3NzaC1yc2E...",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 105,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(105, 100, "test-vm", "pool1", 1, 512, 10)).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMState(testUserID, 105, "stopped", mock.Anything).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name: "no_templates_available",
+			job: &agent.RawJob{
+				ID: "test-job-11",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID:  106,
+					Nodes:     []string{"node1"},
+					Pools:     []string{"pool1"},
+					Templates: []PveTemplate{}, // Empty templates
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+			},
+			expectError: true,
+			errorMsg:    "no templates available",
+		},
+		{
+			name: "template_not_found",
+			job: &agent.RawJob{
+				ID: "test-job-12",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   512,
+					Disk:     10,
+					Template: "nonexistent-template",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.101",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "testuser",
+					LoginPass: "testpass123",
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 107,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+			},
+			expectError: true,
+			errorMsg:    "template 'nonexistent-template' not found",
+		},
+		{
+			name:         "successful_vm_creation_with_firewall_rules",
+			expectedVMID: 108,
+			job: &agent.RawJob{
+				ID: "test-job-13",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm-firewall",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      2,
+					Memory:   2048,
+					Disk:     30,
+					Template: "debian-13",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.110",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "admin",
+					LoginPass: "securepass",
+					FirewallRules: []FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "22",
+							Comment: "Allow SSH",
+						},
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "80,443",
+							Comment: "Allow HTTP/HTTPS",
+						},
+					},
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 108,
+					Nodes:    []string{"node1", "node2"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(108, 100, "test-vm-firewall", "pool1", 2, 2048, 30)).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMState(testUserID, 108, "stopped", mock.Anything).Return(nil).Once()
+				// Expect firewall rule calls
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 108, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "22" && rule.Comment == "Allow SSH"
+				})).Return(nil).Once()
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 108, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "80,443" && rule.Comment == "Allow HTTP/HTTPS"
+				})).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:         "vm_creation_firewall_failure_does_not_block",
+			expectedVMID: 109,
+			job: &agent.RawJob{
+				ID: "test-job-14",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID: "testuser",
+					Name:       "test-vm-firewall-fail",
+				}),
+				Params: rawParamsPtr(VMProperties{
+					CPU:      1,
+					Memory:   1024,
+					Disk:     20,
+					Template: "ubuntu-24.04",
+					NetConfig: &NetworkConfig{
+						IPAddress: "10.0.1.111",
+						Netmask:   24,
+						Gateway:   "10.0.1.1",
+					},
+					LoginUser: "ubuntu",
+					LoginPass: "ubuntu123",
+					FirewallRules: []FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "8080",
+							Comment: "App port",
+						},
+					},
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				userResources := &PveUserResources{
+					NextVMID: 109,
+					Nodes:    []string{"node1"},
+					Pools:    []string{"pool1"},
+					Templates: []PveTemplate{
+						{ID: 100, Name: "debian-13"},
+						{ID: 101, Name: "ubuntu-24.04"},
+					},
+				}
+				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
+				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(109, 101, "test-vm-firewall-fail", "pool1", 1, 1024, 20)).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMState(testUserID, 109, "stopped", mock.Anything).Return(nil).Once()
+				// Firewall rule fails but VM creation should still succeed
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 109, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "8080"
+				})).Return(fmt.Errorf("firewall API error")).Once()
+			},
+			expectError: false, // VM creation succeeds even though firewall failed
 		},
 	}
 
@@ -300,8 +713,8 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				var resources VMResources
 				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
 				require.NoError(t, err, "Should be able to unmarshal agent instance data")
-				assert.Equal(t, 100, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "100", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
+				assert.Equal(t, tt.expectedVMID, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, fmt.Sprintf("%d", tt.expectedVMID), *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}
@@ -309,15 +722,16 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 
 func TestVMAgent_UpdateVMHandler(t *testing.T) {
 	tests := []struct {
-		name          string
-		job           *agent.RawJob
-		setupMock     func(*MockProxmoxClient)
-		expectError   bool
-		errorMsg      string
-		isUnsupported bool
+		name         string
+		job          *agent.RawJob
+		setupMock    func(*MockProxmoxClient)
+		expectError  bool
+		errorMsg     string
+		expectedVMID int
 	}{
 		{
-			name: "successful_vm_update",
+			name:         "successful_vm_update",
+			expectedVMID: 200,
 			job: &agent.RawJob{
 				ID: "test-job-1",
 				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
@@ -326,9 +740,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{"vmid": 200}`),
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    4,
-					Memory: 2048,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(4),
+					Memory: intPtr(2048),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -340,26 +754,6 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "vm_not_stopped",
-			job: &agent.RawJob{
-				ID: "test-job-2",
-				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
-					ConsumerID:        "testuser",
-					Name:              "test-vm",
-					Status:            "running", // Not stopped - using string literal since ServiceStatusRunning is undefined
-					AgentInstanceData: rawResourcesPtr(`{"vmid": 201}`),
-				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
-				}),
-			},
-			setupMock:     func(mockClient *MockProxmoxClient) {}, // No mock calls expected
-			expectError:   true,
-			isUnsupported: true,
-			errorMsg:      "cannot update a VM in status",
-		},
-		{
 			name: "extract_vmid_fails",
 			job: &agent.RawJob{
 				ID: "test-job-3",
@@ -369,9 +763,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{}`), // Missing vmid
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    2,
-					Memory: 1024,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(2),
+					Memory: intPtr(1024),
 				}),
 			},
 			setupMock:   func(mockClient *MockProxmoxClient) {}, // No mock calls expected
@@ -388,9 +782,9 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 					Status:            agent.ServiceStatusStopped,
 					AgentInstanceData: rawResourcesPtr(`{"vmid": 202}`),
 				}),
-				Params: rawParamsPtr(VMProperties{
-					CPU:    8,
-					Memory: 4096,
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(8),
+					Memory: intPtr(4096),
 				}),
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
@@ -401,6 +795,90 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			expectError: true,
 			errorMsg:    "failed to update VM",
+		},
+		{
+			name:         "successful_update_with_firewall_rules",
+			expectedVMID: 203,
+			job: &agent.RawJob{
+				ID: "test-job-5",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 203}`),
+				}),
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(4),
+					Memory: intPtr(2048),
+					FirewallRules: firewallRulesPtr([]FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "443",
+							Comment: "Allow HTTPS",
+						},
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "3306",
+							Comment: "Allow MySQL",
+						},
+					}),
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				mockClient.EXPECT().PatchVM(testUserID, 203, &VmPatch{
+					Cores:  4,
+					Memory: 2048,
+				}).Return(nil).Once()
+				// Expect GetVMFirewallRules for reconciliation
+				mockClient.EXPECT().GetVMFirewallRules(testUserID, 203).Return([]FirewallRule{}, nil).Once()
+				// Expect firewall rule additions
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 203, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "443" && rule.Comment == "Allow HTTPS"
+				})).Return(nil).Once()
+				mockClient.EXPECT().AddVMFirewallRule(testUserID, 203, mock.MatchedBy(func(rule *FirewallRule) bool {
+					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "3306" && rule.Comment == "Allow MySQL"
+				})).Return(nil).Once()
+			},
+			expectError: false,
+		},
+		{
+			name:         "update_firewall_failure_does_not_block",
+			expectedVMID: 204,
+			job: &agent.RawJob{
+				ID: "test-job-6",
+				Service: (*agent.Service[json.RawMessage, json.RawMessage])(&agent.RawService{
+					ConsumerID:        "testuser",
+					Name:              "test-vm",
+					Status:            agent.ServiceStatusStopped,
+					AgentInstanceData: rawResourcesPtr(`{"vmid": 204}`),
+				}),
+				Params: rawUpdateParamsPtr(VMUpdateProperties{
+					CPU:    intPtr(2),
+					Memory: intPtr(1024),
+					FirewallRules: firewallRulesPtr([]FirewallRule{
+						{
+							Type:    "in",
+							Proto:   "tcp",
+							Action:  "ACCEPT",
+							Dport:   "9000",
+							Comment: "App port",
+						},
+					}),
+				}),
+			},
+			setupMock: func(mockClient *MockProxmoxClient) {
+				mockClient.EXPECT().PatchVM(testUserID, 204, &VmPatch{
+					Cores:  2,
+					Memory: 1024,
+				}).Return(nil).Once()
+				// Firewall reconciliation fails but VM update should still succeed
+				mockClient.EXPECT().GetVMFirewallRules(testUserID, 204).Return(nil, fmt.Errorf("firewall service unavailable")).Once()
+			},
+			expectError: false, // VM update succeeds even though firewall failed
 		},
 	}
 
@@ -429,11 +907,6 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				require.Error(t, err, "Expected update VM handler to return an error")
 				assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
 				assert.Nil(t, rawResponse, "Response should be nil when error occurs")
-
-				if tt.isUnsupported {
-					// Check that the error message contains "unsupported"
-					assert.Contains(t, err.Error(), "unsupported", "Error should indicate unsupported operation")
-				}
 			} else {
 				require.NoError(t, err, "Expected update VM handler to succeed")
 				require.NotNil(t, rawResponse, "Response should not be nil")
@@ -444,8 +917,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 				var resources VMResources
 				err := json.Unmarshal(*rawResponse.AgentInstanceData, &resources)
 				require.NoError(t, err, "Should be able to unmarshal agent instance data")
-				assert.Equal(t, 200, resources.VMID, "Response VMID should match expected")
-				assert.Equal(t, "200", *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
+				assert.Equal(t, tt.expectedVMID, resources.VMID, "Response VMID should match expected")
+				assert.Equal(t, fmt.Sprintf("%d", tt.expectedVMID), *rawResponse.AgentInstanceID, "Agent instance ID should match VMID as string")
 			}
 		})
 	}

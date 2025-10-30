@@ -17,11 +17,67 @@ type RemoteConfig struct {
 }
 
 // VMProperties represents the properties of a VM service
-type VMProperties struct {
-	CPU    int    `json:"cpu"`
-	Memory int    `json:"memory"`
-	Disk   int    `json:"disk"`
-	Image  string `json:"image"`
+// VMCreateProperties represents the parameters for creating a new VM (service.create)
+// All fields marked as required must be provided
+type VMCreateProperties struct {
+	// Required fields
+	CPU      int    `json:"cpu"`
+	Memory   int    `json:"memory"`
+	Disk     int    `json:"disk"`
+	Template string `json:"template"` // Template name (validated via serviceOption)
+
+	// Network configuration (required - from pool allocation)
+	NetConfig *NetworkConfig `json:"netconfig"`
+
+	// DNS configuration (optional)
+	Nameserver   string `json:"nameserver,omitempty"`
+	SearchDomain string `json:"searchdomain,omitempty"`
+
+	// Login configuration (required: loginuser + at least one of loginpass/loginsshkey)
+	LoginUser   string `json:"loginuser"`             // Username for VM access (required)
+	LoginPass   string `json:"loginpass,omitempty"`   // Password for VM access
+	LoginSSHKey string `json:"loginsshkey,omitempty"` // SSH public key
+
+	// Security configuration (optional)
+	FirewallRules []FirewallRule `json:"firewallrules,omitempty"` // Firewall rules to apply
+}
+
+// VMUpdateProperties represents the parameters for updating an existing VM (service.update)
+// All fields are optional - only provided fields will be updated (patch semantics)
+// Uses pointers to distinguish between "not provided" (nil) vs "set to zero value"
+type VMUpdateProperties struct {
+	// Optional - only update if provided (pointer distinguishes nil vs 0)
+	CPU    *int `json:"cpu,omitempty"`
+	Memory *int `json:"memory,omitempty"`
+
+	// Firewall rules reconciliation (optional)
+	// - nil: don't touch existing rules
+	// - empty array: remove all rules
+	// - populated array: reconcile with existing rules (add/remove as needed)
+	FirewallRules *[]FirewallRule `json:"firewallrules,omitempty"`
+}
+
+// VMProperties is an alias for VMCreateProperties for backward compatibility
+// Deprecated: Use VMCreateProperties or VMUpdateProperties explicitly
+type VMProperties = VMCreateProperties
+
+// NetworkConfig represents network pool allocation
+type NetworkConfig struct {
+	IPAddress string `json:"ipaddress"` // Static IP from pool
+	Netmask   int    `json:"netmask"`   // CIDR notation (e.g., 24)
+	Gateway   string `json:"gateway"`   // Gateway IP from pool
+}
+
+// FirewallRule represents a VM firewall rule
+type FirewallRule struct {
+	Type    string `json:"type"`              // in or out
+	Proto   string `json:"proto"`             // tcp, udp, icmp
+	Action  string `json:"action"`            // ACCEPT, DROP, REJECT
+	Source  string `json:"source,omitempty"`  // Source IP/CIDR
+	Sport   string `json:"sport,omitempty"`   // Source port(s)
+	Dest    string `json:"dest,omitempty"`    // Destination IP/CIDR
+	Dport   string `json:"dport,omitempty"`   // Destination port(s)
+	Comment string `json:"comment,omitempty"` // Rule description
 }
 
 // VMResources represents the resources in a job response
@@ -62,11 +118,11 @@ func NewVMAgent(
 	stdAgent.OnHealth(vmAgent.HealthHandler())
 
 	// Register job handlers
-	stdAgent.OnJob("service.create", agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
-	stdAgent.OnJob("service.update", agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
-	stdAgent.OnJob("service.start", agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
-	stdAgent.OnJob("service.stop", agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
-	stdAgent.OnJob("service.delete", agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
+	stdAgent.OnJob("create", agent.JobHandlerWrapper(vmAgent.CreateVMHandler()))
+	stdAgent.OnJob("update", agent.JobHandlerWrapper(vmAgent.UpdateVMHandler()))
+	stdAgent.OnJob("start", agent.JobHandlerWrapper(vmAgent.StartVMHandler()))
+	stdAgent.OnJob("stop", agent.JobHandlerWrapper(vmAgent.StopVMHandler()))
+	stdAgent.OnJob("delete", agent.JobHandlerWrapper(vmAgent.DeleteVMHandler()))
 
 	// Register metrics reporter
 	stdAgent.OnMetrics(vmAgent.MetricsReporter())
