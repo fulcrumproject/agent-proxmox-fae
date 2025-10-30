@@ -297,7 +297,65 @@ Content-Type: application/json
     "name": "Proxmox VM Agent {{$timestamp}}",
     "serviceTypeIds": [
         "{{serviceTypeId}}"
-    ]
+    ],
+    "configurationSchema": {
+        "properties": {
+            "proxmoxAPI": {
+                "type": "object",
+                "label": "Proxmox API Configuration",
+                "required": true,
+                "properties": {
+                    "apiToken": {
+                        "type": "string",
+                        "label": "Proxmox API Token",
+                        "required": true,
+                        "secret": {
+                            "type": "persistent"
+                        }
+                    },
+                    "apiUrls": {
+                        "type": "array",
+                        "label": "Proxmox API URLs",
+                        "required": true,
+                        "items": {
+                            "type": "string"
+                        },
+                        "validators": [
+                            {
+                                "type": "minItems",
+                                "config": {
+                                    "value": 1
+                                }
+                            }
+                        ]
+                    },
+                    "insecureSkipTls": {
+                        "type": "boolean",
+                        "label": "Skip TLS Verification",
+                        "default": false
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "label": "Request Timeout (seconds)",
+                        "default": 300,
+                        "validators": [
+                            {
+                                "type": "min",
+                                "config": {
+                                    "value": 1
+                                }
+                            }
+                        ]
+                    },
+                    "debug": {
+                        "type": "boolean",
+                        "label": "Enable Debug Logging",
+                        "default": false
+                    }
+                }
+            }
+        }
+    }
 }
 
 @agentTypeId = {{createAgentType.response.body.$.id}}
@@ -503,6 +561,8 @@ Authorization: Bearer {{consumerToken}}
 ### Get a service by ID
 GET {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{consumerToken}}
+
+# ssh -i test/test_vm_key fulcrum@<VM_IP>
 
 ### Hot update vm status
 PATCH {{baseUrl}}/services/{{serviceId}}
