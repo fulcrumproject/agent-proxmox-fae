@@ -516,8 +516,8 @@ func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Run(run func(username strin
 	return _c
 }
 
-func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Return(firewallRules []FirewallRule, err error) *MockProxmoxClient_GetVMFirewallRules_Call {
-	_c.Call.Return(firewallRules, err)
+func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Return(firewallRuleWithPoss []FirewallRule, err error) *MockProxmoxClient_GetVMFirewallRules_Call {
+	_c.Call.Return(firewallRuleWithPoss, err)
 	return _c
 }
 
@@ -758,7 +758,7 @@ func (_c *MockProxmoxClient_StopVM_Call) RunAndReturn(run func(username string, 
 	return _c
 }
 
-// WaitForVMState provides a mock function with given fields: username, vmid, expectedState, timeout
+// WaitForVMState provides a mock function for the type MockProxmoxClient
 func (_mock *MockProxmoxClient) WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error {
 	ret := _mock.Called(username, vmid, expectedState, timeout)
 
@@ -767,12 +767,11 @@ func (_mock *MockProxmoxClient) WaitForVMState(username string, vmid int, expect
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, int, string, time.Duration) error); ok {
-		r0 = rf(username, vmid, expectedState, timeout)
+	if returnFunc, ok := ret.Get(0).(func(string, int, string, time.Duration) error); ok {
+		r0 = returnFunc(username, vmid, expectedState, timeout)
 	} else {
 		r0 = ret.Error(0)
 	}
-
 	return r0
 }
 
@@ -782,6 +781,10 @@ type MockProxmoxClient_WaitForVMState_Call struct {
 }
 
 // WaitForVMState is a helper method to define mock.On call
+//   - username string
+//   - vmid int
+//   - expectedState string
+//   - timeout time.Duration
 func (_e *MockProxmoxClient_Expecter) WaitForVMState(username interface{}, vmid interface{}, expectedState interface{}, timeout interface{}) *MockProxmoxClient_WaitForVMState_Call {
 	return &MockProxmoxClient_WaitForVMState_Call{Call: _e.mock.On("WaitForVMState", username, vmid, expectedState, timeout)}
 }
@@ -804,7 +807,12 @@ func (_c *MockProxmoxClient_WaitForVMState_Call) Run(run func(username string, v
 		if args[3] != nil {
 			arg3 = args[3].(time.Duration)
 		}
-		run(arg0, arg1, arg2, arg3)
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }

@@ -28,12 +28,6 @@ type PveUser struct {
 	Status  bool `json:"status"`
 }
 
-// PveUserCreation represents the request for creating a new PVE user
-type PveUserCreation struct {
-	UserID string `json:"userid"`
-	PoolID string `json:"poolid"`
-}
-
 // NodesMetrics represents the metrics for all nodes
 type NodesMetrics struct {
 	Metrics map[string]NodesMetricsNode `json:"metrics"`
@@ -109,19 +103,6 @@ type SSHKeyRequest struct {
 type SSHKey struct {
 	Private string `json:"private"`
 	Public  string `json:"public"`
-}
-
-// FirewallRule represents a firewall rule
-type FirewallRule struct {
-	Pos     *int   `json:"pos,omitempty"`
-	Type    string `json:"type"`
-	Proto   string `json:"proto"`
-	Source  string `json:"source,omitempty"`
-	Sport   string `json:"sport,omitempty"`
-	Dest    string `json:"dest,omitempty"`
-	Dport   string `json:"dport,omitempty"`
-	Action  string `json:"action"`
-	Comment string `json:"comment,omitempty"`
 }
 
 // Snapshot represents a VM snapshot
@@ -305,17 +286,11 @@ func (c *Client) Ping() (*vmagent.PingResponse, error) {
 
 // CreateUser creates a new PVE user (implements vmagent.ProxmoxClient interface)
 func (c *Client) CreateUser(req *vmagent.PveUserCreation) error {
-	// Convert vmagent type to proxmoxapi type
-	proxmoxReq := &PveUserCreation{
-		UserID: req.UserID,
-		PoolID: req.PoolID,
-	}
-
-	return c.createPveUser(proxmoxReq)
+	return c.createPveUser(req)
 }
 
-// createPveUser is the internal implementation using proxmoxapi types
-func (c *Client) createPveUser(req *PveUserCreation) error {
+// createPveUser is the internal implementation
+func (c *Client) createPveUser(req *vmagent.PveUserCreation) error {
 	_, err := c.executeWithFailover("createPveUser", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetBody(req).
@@ -516,12 +491,12 @@ func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnab
 
 // GetVMFirewallRules retrieves the firewall rules for a VM
 func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.FirewallRule, error) {
-	var apiRules []FirewallRule
+	var rules []vmagent.FirewallRule
 
 	_, err := c.executeWithFailover("getVMFirewallRules", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			SetResult(&apiRules).
+			SetResult(&rules).
 			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
 	})
 
@@ -529,42 +504,16 @@ func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.Firewa
 		return nil, err
 	}
 
-	// Convert proxmoxapi.FirewallRule to vmagent.FirewallRule
-	rules := make([]vmagent.FirewallRule, len(apiRules))
-	for i, apiRule := range apiRules {
-		rules[i] = vmagent.FirewallRule{
-			Type:    apiRule.Type,
-			Proto:   apiRule.Proto,
-			Action:  apiRule.Action,
-			Source:  apiRule.Source,
-			Sport:   apiRule.Sport,
-			Dest:    apiRule.Dest,
-			Dport:   apiRule.Dport,
-			Comment: apiRule.Comment,
-		}
-	}
-
 	return rules, nil
 }
 
 // AddVMFirewallRule adds a firewall rule to a VM
 func (c *Client) AddVMFirewallRule(username string, vmid int, rule *vmagent.FirewallRule) error {
-	// Convert vmagent.FirewallRule to proxmoxapi.FirewallRule
-	apiRule := &FirewallRule{
-		Type:    rule.Type,
-		Proto:   rule.Proto,
-		Action:  rule.Action,
-		Source:  rule.Source,
-		Sport:   rule.Sport,
-		Dest:    rule.Dest,
-		Dport:   rule.Dport,
-		Comment: rule.Comment,
-	}
-
+	// Pos and Digest will be omitted from JSON due to omitempty tags
 	_, err := c.executeWithFailover("addVMFirewallRule", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			SetBody(apiRule).
+			SetBody(rule).
 			Post(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
 	})
 

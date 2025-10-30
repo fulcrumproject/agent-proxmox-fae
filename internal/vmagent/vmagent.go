@@ -69,6 +69,7 @@ type NetworkConfig struct {
 }
 
 // FirewallRule represents a VM firewall rule
+// Pos and Digest are read-only fields from the API (omitted when creating/updating rules)
 type FirewallRule struct {
 	Type    string `json:"type"`              // in or out
 	Proto   string `json:"proto"`             // tcp, udp, icmp
@@ -78,6 +79,8 @@ type FirewallRule struct {
 	Dest    string `json:"dest,omitempty"`    // Destination IP/CIDR
 	Dport   string `json:"dport,omitempty"`   // Destination port(s)
 	Comment string `json:"comment,omitempty"` // Rule description
+	Pos     *int   `json:"pos,omitempty"`     // Position (read-only from API, omitted when creating)
+	Digest  string `json:"digest,omitempty"`  // Digest (read-only from API, omitted when creating)
 }
 
 // VMResources represents the resources in a job response

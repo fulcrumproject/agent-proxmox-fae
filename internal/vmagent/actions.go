@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"sort"
 	"strconv"
 	"time"
 
@@ -244,12 +245,11 @@ func (v *VMAgent) UpdateVMHandler() agent.JobHandler[VMUpdateProperties, VMUpdat
 	}
 }
 
-// reconcileFirewallRules reconciles the desired firewall rules with the current state
-// It compares current rules with desired rules and adds/removes as needed
+// reconcileFirewallRules reconciles firewall rules by deleting all and re-adding desired ones
 func (v *VMAgent) reconcileFirewallRules(username string, vmid int, desiredRules []FirewallRule) error {
 	slog.Info("Reconciling firewall rules", "vmid", vmid, "desiredCount", len(desiredRules))
 
-	// Get current rules from Proxmox
+	// Get current rules with positions
 	currentRules, err := v.proxmoxClient.GetVMFirewallRules(username, vmid)
 	if err != nil {
 		return fmt.Errorf("failed to get current firewall rules: %w", err)
@@ -257,58 +257,57 @@ func (v *VMAgent) reconcileFirewallRules(username string, vmid int, desiredRules
 
 	slog.Info("Current firewall rules fetched", "vmid", vmid, "currentCount", len(currentRules))
 
-	// Build comparison maps (by rule signature, ignoring comment)
-	currentMap := make(map[string]*FirewallRule)
-	for i := range currentRules {
-		sig := firewallRuleSignature(&currentRules[i])
-		currentMap[sig] = &currentRules[i]
-	}
+	// PHASE 1: Delete all existing rules (in reverse order to avoid position shifting)
+	if len(currentRules) > 0 {
+		slog.Info("Deleting all existing firewall rules", "vmid", vmid, "count", len(currentRules))
 
-	desiredMap := make(map[string]*FirewallRule)
-	for i := range desiredRules {
-		sig := firewallRuleSignature(&desiredRules[i])
-		desiredMap[sig] = &desiredRules[i]
-	}
+		// Collect positions in descending order
+		positions := make([]int, 0, len(currentRules))
+		for _, rule := range currentRules {
+			if rule.Pos != nil {
+				positions = append(positions, *rule.Pos)
+			}
+		}
 
-	// Note: We cannot reliably delete rules by position because:
-	// 1. The API's GetVMFirewallRules may not return position (Pos)
-	// 2. Positions shift after each deletion
-	// 3. The proxmoxapi.FirewallRule has Pos but vmagent.FirewallRule doesn't
-	//
-	// Strategy: Just add new rules (idempotent on the proxmox side hopefully)
-	// For true reconciliation, we'd need to clear all rules first or use positions
+		// Sort descending (delete highest position first)
+		sort.Sort(sort.Reverse(sort.IntSlice(positions)))
 
-	addCount := 0
-	// Add rules that don't exist in current state
-	for sig, rule := range desiredMap {
-		if _, exists := currentMap[sig]; !exists {
-			err := v.proxmoxClient.AddVMFirewallRule(username, vmid, rule)
+		// Delete all rules
+		deleteCount := 0
+		for _, pos := range positions {
+			err := v.proxmoxClient.DeleteVMFirewallRule(username, vmid, pos)
 			if err != nil {
-				slog.Error("Failed to add firewall rule", "vmid", vmid, "rule", rule, "error", err)
+				slog.Error("Failed to delete firewall rule", "vmid", vmid, "position", pos, "error", err)
 				// Continue - best effort
 			} else {
-				slog.Info("Added firewall rule", "vmid", vmid, "comment", rule.Comment)
+				slog.Debug("Deleted firewall rule", "vmid", vmid, "position", pos)
+				deleteCount++
+			}
+		}
+		slog.Info("Deleted firewall rules", "vmid", vmid, "count", deleteCount)
+	}
+
+	// PHASE 2: Add all desired rules
+	if len(desiredRules) > 0 {
+		slog.Info("Adding desired firewall rules", "vmid", vmid, "count", len(desiredRules))
+		addCount := 0
+		for i, rule := range desiredRules {
+			err := v.proxmoxClient.AddVMFirewallRule(username, vmid, &rule)
+			if err != nil {
+				slog.Error("Failed to add firewall rule", "vmid", vmid, "ruleIndex", i, "rule", rule, "error", err)
+				// Continue - best effort
+			} else {
+				slog.Debug("Added firewall rule", "vmid", vmid, "ruleIndex", i, "comment", rule.Comment)
 				addCount++
 			}
 		}
+		slog.Info("Added firewall rules", "vmid", vmid, "count", addCount)
+	} else {
+		slog.Info("No firewall rules to add", "vmid", vmid)
 	}
 
-	// Note: Deletion is skipped because we don't have reliable position information
-	// To implement deletion, we would need:
-	// 1. proxmoxapi.FirewallRule to vmagent.FirewallRule conversion to preserve Pos
-	// 2. Delete rules in reverse order (highest pos first) to avoid position shifting
-	// OR: Add a "clear all rules" API endpoint and rebuild from scratch
-
-	slog.Info("Firewall reconciliation complete", "vmid", vmid, "added", addCount)
+	slog.Info("Firewall reconciliation complete", "vmid", vmid, "desiredCount", len(desiredRules))
 	return nil
-}
-
-// firewallRuleSignature creates a unique signature for a firewall rule
-// Used for comparison (ignores comment field)
-func firewallRuleSignature(rule *FirewallRule) string {
-	return fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
-		rule.Type, rule.Proto, rule.Action,
-		rule.Source, rule.Sport, rule.Dest, rule.Dport)
 }
 
 // StartVMHandler handles VM start jobs

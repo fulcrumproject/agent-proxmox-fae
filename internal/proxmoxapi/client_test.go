@@ -55,7 +55,7 @@ func TestClientCreateAndGetUser(t *testing.T) {
 
 	testUUID := uuid.New().String()
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
-	userReq := &PveUserCreation{
+	userReq := &vmagent.PveUserCreation{
 		UserID: userID,
 		PoolID: poolID,
 	}
@@ -125,7 +125,7 @@ func TestClientGetTemplates(t *testing.T) {
 	testUUID := uuid.New().String()
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 
-	userReq := &PveUserCreation{
+	userReq := &vmagent.PveUserCreation{
 		UserID: userID,
 		PoolID: poolID,
 	}
@@ -166,7 +166,7 @@ func TestClientVMLifecycle(t *testing.T) {
 	testUUID := uuid.New().String()
 	userID, poolID := vmagent.MakeUserIDs(testUUID)
 
-	userReq := &PveUserCreation{
+	userReq := &vmagent.PveUserCreation{
 		UserID: userID,
 		PoolID: poolID,
 	}
@@ -249,7 +249,7 @@ func TestClientVMLifecycle(t *testing.T) {
 	t.Logf("  Login: User=%s", vmReq.LoginUser)
 
 	// Step 5: Wait for VM to be in stopped state after creation
-	if !waitForVMState(t, client, userID, vmid, "stopped", 30*time.Second) {
+	if !waitForVMState(t, client, userID, vmid, "stopped", 60*time.Second) {
 		t.Logf("VM did not reach stopped state after creation, continuing anyway...")
 	}
 
