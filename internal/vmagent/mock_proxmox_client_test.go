@@ -516,8 +516,8 @@ func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Run(run func(username strin
 	return _c
 }
 
-func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Return(firewallRuleWithPoss []FirewallRule, err error) *MockProxmoxClient_GetVMFirewallRules_Call {
-	_c.Call.Return(firewallRuleWithPoss, err)
+func (_c *MockProxmoxClient_GetVMFirewallRules_Call) Return(firewallRules []FirewallRule, err error) *MockProxmoxClient_GetVMFirewallRules_Call {
+	_c.Call.Return(firewallRules, err)
 	return _c
 }
 
