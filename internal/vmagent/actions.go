@@ -220,6 +220,12 @@ func (v *VMAgent) UpdateVMHandler() agent.JobHandler[VMUpdateProperties, VMUpdat
 			slog.Info("Updating Memory", "vmid", vmid, "memory", *job.Params.Memory)
 		}
 
+		if job.Params.Disk != nil {
+			patchConfig.DiskSize = *job.Params.Disk
+			patchNeeded = true
+			slog.Info("Updating Disk", "vmid", vmid, "disk", *job.Params.Disk)
+		}
+
 		// Apply VM patches if any fields were provided
 		if patchNeeded {
 			err := v.proxmoxClient.PatchVM(username, vmid, patchConfig)

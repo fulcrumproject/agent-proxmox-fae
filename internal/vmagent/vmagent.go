@@ -49,6 +49,7 @@ type VMUpdateProperties struct {
 	// Optional - only update if provided (pointer distinguishes nil vs 0)
 	CPU    *int `json:"cpu,omitempty"`
 	Memory *int `json:"memory,omitempty"`
+	Disk   *int `json:"disk,omitempty"`
 
 	// Firewall rules reconciliation (optional)
 	// - nil: don't touch existing rules

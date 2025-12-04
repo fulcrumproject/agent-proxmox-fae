@@ -97,6 +97,7 @@ type VmCreateFromTemplate struct {
 
 // VmPatch represents the request for patching a VM
 type VmPatch struct {
-	Cores  int `json:"cores"`
-	Memory int `json:"memory"`
+	Cores    int `json:"cores"`
+	Memory   int `json:"memory"`
+	DiskSize int `json:"disksize"`
 }
