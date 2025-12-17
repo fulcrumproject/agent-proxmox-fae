@@ -51,6 +51,7 @@ func main() {
 		stdagent.WithHealthInterval(60*time.Second),
 		stdagent.WithJobPollInterval(cfg.JobPollInterval),
 		stdagent.WithMetricsReportInterval(cfg.MetricReportInterval),
+		stdagent.WithConnectRetryInterval(10*time.Second),
 	)
 
 	// Handle graceful shutdown

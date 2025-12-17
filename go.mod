@@ -3,10 +3,10 @@ module github.com/fulcrumproject/agent-proxmox-fae
 go 1.24.5
 
 require (
-	github.com/fulcrumproject/agent-lib-go v0.0.0-20251030144110-e3f1ddef4eb3
+	github.com/fulcrumproject/agent-lib-go v0.0.0-20251217135146-0f10b8f5a2fd
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
-	resty.dev/v3 v3.0.0-beta.3
+	resty.dev/v3 v3.0.0-beta.5
 )
 
 require (
@@ -20,14 +20,14 @@ require (
 
 require (
 	github.com/fulcrumproject/utils v0.0.0-20250716134607-ea1fe63b7dd8
-	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.28.0 // indirect
+	github.com/go-playground/validator/v10 v10.29.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 )
