@@ -27,8 +27,8 @@ func matchVmCreateFromTemplate(vmid, templateID int, name, pool string, cores, m
 			vmReq.TemplateVMID == templateID &&
 			vmReq.Name == name &&
 			vmReq.Pool == pool &&
-			vmReq.Sockets == 1 &&
-			vmReq.Cores == cores &&
+			vmReq.Bridge == "vmbr" &&
+			vmReq.CPUs == cores &&
 			vmReq.Memory == memory &&
 			vmReq.DiskSize == disk &&
 			// Allow any reasonable node name since it's randomly selected
@@ -747,8 +747,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM(testUserID, 200, &VmPatch{
-					Cores:  4,
-					Memory: 2048,
+					CPUs:   intPtr(4),
+					Memory: intPtr(2048),
 				}).Return(nil).Once()
 			},
 			expectError: false,
@@ -789,8 +789,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM(testUserID, 202, &VmPatch{
-					Cores:  8,
-					Memory: 4096,
+					CPUs:   intPtr(8),
+					Memory: intPtr(4096),
 				}).Return(errors.New("VM is locked")).Once()
 			},
 			expectError: true,
@@ -830,8 +830,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM(testUserID, 203, &VmPatch{
-					Cores:  4,
-					Memory: 2048,
+					CPUs:   intPtr(4),
+					Memory: intPtr(2048),
 				}).Return(nil).Once()
 				// Expect GetVMFirewallRules for reconciliation
 				mockClient.EXPECT().GetVMFirewallRules(testUserID, 203).Return([]FirewallRule{}, nil).Once()
@@ -872,8 +872,8 @@ func TestVMAgent_UpdateVMHandler(t *testing.T) {
 			},
 			setupMock: func(mockClient *MockProxmoxClient) {
 				mockClient.EXPECT().PatchVM(testUserID, 204, &VmPatch{
-					Cores:  2,
-					Memory: 1024,
+					CPUs:   intPtr(2),
+					Memory: intPtr(1024),
 				}).Return(nil).Once()
 				// Firewall reconciliation fails but VM update should still succeed
 				mockClient.EXPECT().GetVMFirewallRules(testUserID, 204).Return(nil, fmt.Errorf("firewall service unavailable")).Once()

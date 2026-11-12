@@ -81,23 +81,23 @@ type VmCreateFromTemplate struct {
 	TemplateVMID int    `json:"templatevmid"`
 	Name         string `json:"name"`
 	Pool         string `json:"pool"`
-	Sockets      int    `json:"sockets"`
-	Cores        int    `json:"cores"`
+	CPUs         int    `json:"cpus"`
 	Memory       int    `json:"memory"`
 	DiskSize     int    `json:"disksize"`
 	LoginUser    string `json:"loginuser,omitempty"`
 	LoginPass    string `json:"loginpass,omitempty"`
 	LoginSSHKey  string `json:"loginsshkey,omitempty"`
-	IPAddress    string `json:"ipaddress,omitempty"`
-	Netmask      int    `json:"netmask,omitempty"`
-	Gateway      string `json:"gateway,omitempty"`
-	Nameserver   string `json:"nameserver,omitempty"`
-	SearchDomain string `json:"searchdomain,omitempty"`
+	Bridge       string `json:"net0_bridge"`
+	IPAddress    string `json:"net0_ipaddress,omitempty"`
+	Netmask      int    `json:"net0_netmask,omitempty"`
+	Gateway      string `json:"net0_gateway,omitempty"`
+	Nameserver   string `json:"net0_nameserver,omitempty"`
+	SearchDomain string `json:"net0_searchdomain,omitempty"`
 }
 
-// VmPatch represents the request for patching a VM
+// VmPatch preserves omitted fields while forwarding explicitly supplied values.
 type VmPatch struct {
-	Cores    int `json:"cores"`
-	Memory   int `json:"memory"`
-	DiskSize int `json:"disksize"`
+	CPUs     *int `json:"cpus,omitempty"`
+	Memory   *int `json:"memory,omitempty"`
+	DiskSize *int `json:"disksize,omitempty"`
 }

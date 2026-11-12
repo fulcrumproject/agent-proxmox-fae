@@ -139,6 +139,26 @@ Jobs are processed according to the state machine rules and Proxmox API capabili
 
 The agent integrates with Proxmox Virtual Environment through the Opiquad Enhanced Proxmox API wrapper, which provides additional features and simplified access to Proxmox functionality.
 
+### FAE API Compatibility
+
+The client targets the FAE 0.17 API, with the reference schema in
+`internal/proxmoxapi/openapi.json` (version 0.17.5.817). Configure the FAE
+**base URL**, for example `https://fae-test.example:5297`, without `/pve`
+or `/docs`. The client uses `/pve/...` routes and POST for start/stop;
+the old `/fae/v1/...` routes are not supported.
+
+Fulcrum service properties remain unchanged: `cpu`, `memory`, `disk`,
+`netconfig`, DNS, login and firewall properties. The agent translates them
+to FAE's `cpus` and `net0_*` fields and omits fields not supplied in partial
+updates. It uses `net0_bridge: "vmbr"` for the infrastructure network.
+The operator must supply IP/prefix/gateway values appropriate to that
+bridge through the existing Fulcrum network pool. The agent does not
+provision vnets, VDCs, DHCP or routing.
+
+The existing `user-<consumer-id>` / `pool-<consumer-id>` identity mapping is
+preserved. The FAE API token, scoped `PVE-User` header and guest login
+credentials remain separate.
+
 ### API Communication
 - Uses the **Opiquad Enhanced Proxmox API wrapper** for streamlined VM operations
 - Built on top of Proxmox VE REST API with enhanced functionality
@@ -222,43 +242,85 @@ go test -v ./internal/vmagent
 
 ### Integration Tests
 
-Integration tests require a running Proxmox API server for testing real API interactions.
+Integration tests contact a real FAE **test environment**. Normal
+`go test ./...` runs the offline HTTP-contract and agent-handler tests,
+skipping live tests.
 
 #### Setup
 
-1. Copy the example environment file:
-   ```bash
-   cp .env_proxmoxapi.test.example .env_proxmoxapi.test
-   ```
-
-2. Edit `.env_proxmoxapi.test` with your Proxmox API connection details:
-   ```bash
-   # Proxmox API Connection for testing
-   PROXMOX_AGENT_PROXMOX_API_URL=https://your-proxmox-server:8006/api2/json
-   PROXMOX_AGENT_PROXMOX_API_TOKEN=PROXMOX-SECRET-TOKEN
-   PROXMOX_AGENT_PROXMOX_API_INSECURE_SKIP_TLS=false
-   PROXMOX_AGENT_PROXMOX_API_TIMEOUT=30s
-   PROXMOX_AGENT_PROXMOX_API_DEBUG=false
-   ```
-   
-   **Important:** The `.env_proxmoxapi.test` file is ignored by git and should not be committed as it contains sensitive credentials.
-
-#### Running Integration Tests
+If you do not already have a local configuration file:
 
 ```bash
-# Run integration tests
-INTEGRATION_TESTS=1 go test -v ./internal/proxmoxapi
-
-# Run all tests including integration tests
-INTEGRATION_TESTS=1 go test ./...
+cp .env_proxmoxapi.test.example .env_proxmoxapi.test
+chmod 600 .env_proxmoxapi.test
 ```
 
-**Note:** Integration tests are skipped by default. Set `INTEGRATION_TESTS=1` to enable them.
+Configure a single FAE base URL and token in `.env_proxmoxapi.test`:
 
-#### What Integration Tests Cover
+```dotenv
+PROXMOX_AGENT_PROXMOX_API_URLS=https://fae-test.example:5297
+PROXMOX_AGENT_PROXMOX_API_TOKEN="YOUR_FAE_TOKEN"
+PROXMOX_AGENT_PROXMOX_API_INSECURE_SKIP_TLS=false
+PROXMOX_AGENT_PROXMOX_API_TIMEOUT=30
+PROXMOX_AGENT_PROXMOX_API_DEBUG=false
+```
 
-The integration tests verify real Proxmox API interactions including:
-- API connectivity and authentication
-- VM lifecycle operations (create, start, stop, delete)
-- Resource queries and status monitoring
-- Error handling for invalid operations
+`URLS` is plural; the timeout is an integer number of seconds. The loader
+finds this file in the repository root even when Go runs tests from the
+package directory. The file is ignored by Git; never commit credentials.
+Use a hostname matching the certificate; TLS verification bypass is only
+appropriate for an explicitly trusted test endpoint. Live tests disable
+HTTP debug logging and require a single endpoint.
+
+#### Read-only checks
+
+```bash
+INTEGRATION_TESTS=1 go test -count=1 -v ./internal/proxmoxapi \
+  -run '^(TestClientPing|TestClientGetNodes|TestClientGetNodesMetrics)$'
+```
+
+These check connectivity, both health flags, nodes and node metrics.
+Authentication/API errors fail the tests rather than merely being logged.
+
+#### VM lifecycle
+
+Add the following environment-specific fixtures to the same local file:
+
+```dotenv
+PROXMOX_AGENT_TEST_TEMPLATE=YOUR_LINUX_CLOUD_INIT_TEMPLATE
+PROXMOX_AGENT_TEST_IPADDRESS=YOUR_RESERVED_TEST_IPV4_ADDRESS
+PROXMOX_AGENT_TEST_NETMASK=24
+PROXMOX_AGENT_TEST_GATEWAY=YOUR_TEST_GATEWAY
+# Optional:
+PROXMOX_AGENT_TEST_NAMESERVER=
+PROXMOX_AGENT_TEST_SEARCHDOMAIN=
+PROXMOX_AGENT_TEST_VNC_SOURCE_IP=
+```
+
+Reserve an unused address on the infrastructure bridge (`vmbr`). Do not
+copy an address from a production VM or assume DHCP is available. Choose
+a Linux cloud-init template with a base disk no larger than 20 GiB.
+Missing/invalid required fixtures fail before user/VM creation.
+
+```bash
+INTEGRATION_TESTS=1 go test -count=1 -v -timeout=15m ./internal/proxmoxapi \
+  -run '^TestClientVMLifecycle$'
+```
+
+The test creates a uniquely named user/pool and VM, then verifies:
+- User/resource/template access and VM creation/readiness.
+- Separate CPU, memory and disk updates, preserving unrelated fields.
+- Firewall rule creation, retrieval and deletion.
+- VM start, status/metric reads and stop.
+- VM deletion, confirmed by HTTP 404, not an arbitrary API failure.
+
+VM cleanup is also attempted after failures, guarded by the unique VM name.
+Any cleanup error is reported as a failure. **FAE exposes no user/pool
+deletion endpoint:** their IDs are logged for operator cleanup.
+`TestClientCreateAndGetUser` and `TestClientGetTemplates` also create users,
+so running the entire integration suite is not read-only.
+
+The optional VNC subtest is explicitly skipped unless a source IP is
+configured. The lifecycle test does not verify SSH reachability or the full
+Fulcrum job-dispatch path; it exercises the real FAE client. Handler mapping
+and metrics reporting are additionally covered by offline tests.

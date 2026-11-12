@@ -21,6 +21,17 @@ type Client struct {
 	mu          sync.RWMutex // Thread-safe access to endpoints
 }
 
+// HTTPError retains the response status, so callers can distinguish missing
+// resources from authentication, validation and server failures.
+type HTTPError struct {
+	Operation  string
+	StatusCode int
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("%s failed with status %d", e.Operation, e.StatusCode)
+}
+
 // PveUser represents a PVE user response
 type PveUser struct {
 	Enabled bool `json:"enabled"`
@@ -253,7 +264,7 @@ func (c *Client) executeWithFailover(operation string, reqFunc func(baseURL stri
 				"attempt", attempt+1,
 				"total", len(shuffled))
 		} else {
-			lastErr = fmt.Errorf("%s failed with status %d", operation, resp.StatusCode())
+			lastErr = &HTTPError{Operation: operation, StatusCode: resp.StatusCode()}
 			slog.Warn("Request returned error status",
 				"operation", operation,
 				"endpoint", endpoint,
@@ -294,7 +305,7 @@ func (c *Client) createPveUser(req *vmagent.PveUserCreation) error {
 	_, err := c.executeWithFailover("createPveUser", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetBody(req).
-			Post(baseURL + "/fae/v1/pveuser")
+			Post(baseURL + "/pve/pveuser")
 	})
 
 	return err
@@ -308,7 +319,7 @@ func (c *Client) GetUser(username string) (*PveUser, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetResult(&user).
-			Get(baseURL + "/fae/v1/pveuser")
+			Get(baseURL + "/pve/pveuser")
 	})
 
 	if err != nil {
@@ -326,7 +337,7 @@ func (c *Client) GetUserPools(username string) (*vmagent.PveUserResources, error
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetResult(&resources).
-			Get(baseURL + "/fae/v1/pveuser/resources")
+			Get(baseURL + "/pve/pveuser/resources")
 	})
 
 	if err != nil {
@@ -343,7 +354,7 @@ func (c *Client) GetNodes() ([]string, error) {
 	_, err := c.executeWithFailover("getNodes", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetResult(&nodes).
-			Get(baseURL + "/fae/v1/nodes")
+			Get(baseURL + "/pve/nodes")
 	})
 
 	if err != nil {
@@ -360,7 +371,7 @@ func (c *Client) GetNodesMetrics() (*NodesMetrics, error) {
 	_, err := c.executeWithFailover("getNodesMetrics", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetResult(&metrics).
-			Get(baseURL + "/fae/v1/nodes/metrics")
+			Get(baseURL + "/pve/nodes/metrics")
 	})
 
 	if err != nil {
@@ -376,7 +387,7 @@ func (c *Client) CreateVMFromTemplate(username string, vmReq *vmagent.VmCreateFr
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetBody(vmReq).
-			Post(baseURL + "/fae/v1/vms/create/from-template")
+			Post(baseURL + "/pve/vms/create/from-template")
 	})
 
 	return err
@@ -390,7 +401,7 @@ func (c *Client) GetVM(username string, vmid int) (*vmagent.Vm, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetResult(&vm).
-			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+			Get(baseURL + fmt.Sprintf("/pve/vms/%d", vmid))
 	})
 
 	if err != nil {
@@ -406,7 +417,7 @@ func (c *Client) PatchVM(username string, vmid int, patchReq *vmagent.VmPatch) e
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetBody(patchReq).
-			Patch(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+			Patch(baseURL + fmt.Sprintf("/pve/vms/%d", vmid))
 	})
 
 	return err
@@ -417,7 +428,7 @@ func (c *Client) DeleteVM(username string, vmid int) error {
 	_, err := c.executeWithFailover("deleteVM", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			Delete(baseURL + fmt.Sprintf("/fae/v1/vms/%d", vmid))
+			Delete(baseURL + fmt.Sprintf("/pve/vms/%d", vmid))
 	})
 
 	return err
@@ -428,7 +439,7 @@ func (c *Client) StartVM(username string, vmid int) error {
 	_, err := c.executeWithFailover("startVM", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/start", vmid))
+			Post(baseURL + fmt.Sprintf("/pve/vms/%d/start", vmid))
 	})
 
 	return err
@@ -439,7 +450,7 @@ func (c *Client) StopVM(username string, vmid int) error {
 	_, err := c.executeWithFailover("stopVM", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/stop", vmid))
+			Post(baseURL + fmt.Sprintf("/pve/vms/%d/stop", vmid))
 	})
 
 	return err
@@ -479,7 +490,7 @@ func (c *Client) OpenVNC(username string, vmid int, vncReq *VncEnable) (*VncEnab
 			SetHeader("PVE-User", username).
 			SetBody(vncReq).
 			SetResult(&vncResp).
-			Post(baseURL + fmt.Sprintf("/fae/v1/vms/%d/vnc", vmid))
+			Post(baseURL + fmt.Sprintf("/pve/vms/%d/vnc", vmid))
 	})
 
 	if err != nil {
@@ -497,7 +508,7 @@ func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.Firewa
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
 			SetResult(&rules).
-			Get(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+			Get(baseURL + fmt.Sprintf("/pve/vms/%d/firewall", vmid))
 	})
 
 	if err != nil {
@@ -509,12 +520,15 @@ func (c *Client) GetVMFirewallRules(username string, vmid int) ([]vmagent.Firewa
 
 // AddVMFirewallRule adds a firewall rule to a VM
 func (c *Client) AddVMFirewallRule(username string, vmid int, rule *vmagent.FirewallRule) error {
-	// Pos and Digest will be omitted from JSON due to omitempty tags
+	// Position and digest belong to the read model, not the create request.
+	request := *rule
+	request.Pos = nil
+	request.Digest = ""
 	_, err := c.executeWithFailover("addVMFirewallRule", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			SetBody(rule).
-			Post(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall", vmid))
+			SetBody(&request).
+			Post(baseURL + fmt.Sprintf("/pve/vms/%d/firewall", vmid))
 	})
 
 	return err
@@ -525,7 +539,7 @@ func (c *Client) DeleteVMFirewallRule(username string, vmid int, pos int) error 
 	_, err := c.executeWithFailover("deleteVMFirewallRule", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
 			SetHeader("PVE-User", username).
-			Delete(baseURL + fmt.Sprintf("/fae/v1/vms/%d/firewall/%d", vmid, pos))
+			Delete(baseURL + fmt.Sprintf("/pve/vms/%d/firewall/%d", vmid, pos))
 	})
 
 	return err

@@ -139,13 +139,13 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 			TemplateVMID: selectedTemplate.ID,
 			Name:         vmName,
 			Pool:         poolName,
-			Sockets:      1,
-			Cores:        job.Params.CPU,
+			CPUs:         job.Params.CPU,
 			Memory:       job.Params.Memory,
 			DiskSize:     job.Params.Disk,
 			LoginUser:    job.Params.LoginUser,
 			LoginPass:    job.Params.LoginPass,
 			LoginSSHKey:  job.Params.LoginSSHKey,
+			Bridge:       "vmbr", // Infrastructure bridge; VNet/VDC provisioning is outside this agent.
 			IPAddress:    job.Params.NetConfig.IPAddress,
 			Netmask:      job.Params.NetConfig.Netmask,
 			Gateway:      job.Params.NetConfig.Gateway,
@@ -209,19 +209,19 @@ func (v *VMAgent) UpdateVMHandler() agent.JobHandler[VMUpdateProperties, VMUpdat
 		patchConfig := &VmPatch{}
 
 		if job.Params.CPU != nil {
-			patchConfig.Cores = *job.Params.CPU
+			patchConfig.CPUs = job.Params.CPU
 			patchNeeded = true
 			slog.Info("Updating CPU", "vmid", vmid, "cores", *job.Params.CPU)
 		}
 
 		if job.Params.Memory != nil {
-			patchConfig.Memory = *job.Params.Memory
+			patchConfig.Memory = job.Params.Memory
 			patchNeeded = true
 			slog.Info("Updating Memory", "vmid", vmid, "memory", *job.Params.Memory)
 		}
 
 		if job.Params.Disk != nil {
-			patchConfig.DiskSize = *job.Params.Disk
+			patchConfig.DiskSize = job.Params.Disk
 			patchNeeded = true
 			slog.Info("Updating Disk", "vmid", vmid, "disk", *job.Params.Disk)
 		}
