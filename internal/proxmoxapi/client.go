@@ -493,31 +493,34 @@ func (c *Client) WaitForVMState(username string, vmid int, expectedState string,
 	return fmt.Errorf("timeout waiting for VM %d to reach state '%s' with lock=false after %v", vmid, expectedState, timeout)
 }
 
-// WaitForVMReady waits for provisioning and the requested power state, not just
-// a transient stopped/unlocked clone. It never starts, stops or deletes the VM.
-func (c *Client) WaitForVMReady(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error {
+// WaitForVMReady waits for completed provisioning, whether the VM is running
+// or stopped. It returns the observed VM and never changes its power state.
+func (c *Client) WaitForVMReady(ctx context.Context, username string, vmid int, timeout time.Duration) (*vmagent.Vm, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	lastState := "not observed"
 	for {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("waiting for VM %d provisioning in state %q (%s): %w", vmid, expectedState, lastState, err)
+			return nil, fmt.Errorf("waiting for VM %d provisioning (%s): %w", vmid, lastState, err)
 		}
 		vm, err := c.getVM(ctx, username, vmid)
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("waiting for VM %d provisioning (%s): %w", vmid, lastState, ctx.Err())
+		}
 		if err == nil {
 			lastState = fmt.Sprintf("status=%s lock=%t qemuReady=%t", vm.Status, vm.Lock, vm.QemuReady)
-			if vm.Status == expectedState && !vm.Lock && vm.QemuReady {
-				return nil
+			if (vm.Status == "running" || vm.Status == "stopped") && !vm.Lock && vm.QemuReady {
+				return vm, nil
 			}
 		} else {
 			var httpErr *HTTPError
 			if errors.As(err, &httpErr) && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 && httpErr.StatusCode != 404 && httpErr.StatusCode != 429 {
-				return err
+				return nil, err
 			}
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("waiting for VM %d provisioning in state %q (%s): %w", vmid, expectedState, lastState, ctx.Err())
+			return nil, fmt.Errorf("waiting for VM %d provisioning (%s): %w", vmid, lastState, ctx.Err())
 		case <-time.After(2 * time.Second):
 		}
 	}

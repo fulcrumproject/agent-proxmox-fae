@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
 	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
@@ -167,18 +168,40 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		slog.Info("Successfully created VM", "vmid", nextID, "name", job.Service.Name, "user", username)
 
 		// The first stopped/unlocked response can precede guest initialization.
-		// Require provisioning readiness as well, without silently stopping the VM.
+		// Readiness is independent of power state; normalize to Stopped only afterwards.
 		timeout := v.readyTimeout
 		if timeout <= 0 {
 			timeout = config.DefaultReadyTimeout
 		}
 		slog.Info("Waiting for VM provisioning", "vmid", nextID, "timeout", timeout)
-		err = v.proxmoxClient.WaitForVMReady(ctx, username, nextID, "stopped", timeout)
+		readyVM, err := v.proxmoxClient.WaitForVMReady(ctx, username, nextID, timeout)
 		if err != nil {
 			slog.Error("Failed waiting for VM to be ready", "vmid", nextID, "error", err)
 			return nil, fmt.Errorf("VM created but failed to become ready: %w", err)
 		}
-		slog.Info("VM is ready", "vmid", nextID)
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("VM ready but creation was cancelled: %w", err)
+		}
+		if readyVM == nil {
+			return nil, fmt.Errorf("VM created but readiness check returned no VM")
+		}
+		slog.Info("VM is ready", "vmid", nextID, "status", readyVM.Status)
+		switch readyVM.Status {
+		case "running":
+			// Fulcrum's create action must finish Stopped. Do not interrupt guest
+			// initialization: stop only after qemuReady=true and lock=false.
+			slog.Info("Stopping initialized VM to complete creation", "vmid", nextID)
+			if err := v.proxmoxClient.StopVM(username, nextID); err != nil {
+				return nil, fmt.Errorf("VM ready but failed to stop: %w", err)
+			}
+			if err := v.proxmoxClient.WaitForVMState(username, nextID, "stopped", time.Minute); err != nil {
+				return nil, fmt.Errorf("VM ready but failed to reach stopped state: %w", err)
+			}
+		case "stopped":
+			// Already in the requested final state; no stop request is needed.
+		default:
+			return nil, fmt.Errorf("unexpected ready VM state %q", readyVM.Status)
+		}
 
 		// Apply firewall rules if present (errors are logged but don't fail VM creation)
 		if len(job.Params.FirewallRules) > 0 {

@@ -22,7 +22,7 @@ type ProxmoxClient interface {
 	StartVM(username string, vmid int) error
 	StopVM(username string, vmid int) error
 	WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error
-	WaitForVMReady(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error
+	WaitForVMReady(ctx context.Context, username string, vmid int, timeout time.Duration) (*Vm, error)
 
 	// Firewall management
 	AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error

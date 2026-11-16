@@ -181,13 +181,25 @@ func TestClientVMLifecycle(t *testing.T) {
 	})
 	t.Logf("Creating VM %d (%s), node %s, template %s, network %s/%d", vmid, vmName, vmReq.Node, templateName, ipAddress, netmask)
 	require.NoError(t, client.CreateVMFromTemplate(userID, vmReq))
-	require.NoError(t, client.WaitForVMReady(context.Background(), userID, vmid, "stopped", readyTimeout))
+	readyVM, err := client.WaitForVMReady(context.Background(), userID, vmid, readyTimeout)
+	require.NoError(t, err)
+	require.Equal(t, vmid, readyVM.VMID)
+	require.Equal(t, vmName, readyVM.Name)
+	require.True(t, readyVM.QemuReady)
+	require.False(t, readyVM.Lock)
+	require.Contains(t, []string{"running", "stopped"}, readyVM.Status)
+	t.Logf("Provisioning completed: VM %d status=%s qemuReady=%t", vmid, readyVM.Status, readyVM.QemuReady)
+	if readyVM.Status == "running" {
+		require.NoError(t, client.StopVM(userID, vmid))
+		require.NoError(t, client.WaitForVMState(userID, vmid, "stopped", time.Minute))
+	}
+	t.Logf("Creation finalized: VM %d is stopped", vmid)
 	vm, err := client.GetVM(userID, vmid)
 	require.NoError(t, err)
 	require.Equal(t, vmid, vm.VMID)
 	require.Equal(t, vmName, vm.Name)
 	require.False(t, vm.Lock)
-	require.True(t, vm.QemuReady)
+	require.Equal(t, "stopped", vm.Status)
 
 	// Partial updates must not send zeroes for unrelated fields.
 	cpus, memory, diskSize := 2, 2048, 21

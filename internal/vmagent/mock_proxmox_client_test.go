@@ -760,20 +760,31 @@ func (_c *MockProxmoxClient_StopVM_Call) RunAndReturn(run func(username string, 
 }
 
 // WaitForVMReady provides a mock function for the type MockProxmoxClient
-func (_mock *MockProxmoxClient) WaitForVMReady(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error {
-	ret := _mock.Called(ctx, username, vmid, expectedState, timeout)
+func (_mock *MockProxmoxClient) WaitForVMReady(ctx context.Context, username string, vmid int, timeout time.Duration) (*Vm, error) {
+	ret := _mock.Called(ctx, username, vmid, timeout)
 
 	if len(ret) == 0 {
 		panic("no return value specified for WaitForVMReady")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, string, time.Duration) error); ok {
-		r0 = returnFunc(ctx, username, vmid, expectedState, timeout)
-	} else {
-		r0 = ret.Error(0)
+	var r0 *Vm
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, time.Duration) (*Vm, error)); ok {
+		return returnFunc(ctx, username, vmid, timeout)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int, time.Duration) *Vm); ok {
+		r0 = returnFunc(ctx, username, vmid, timeout)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*Vm)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int, time.Duration) error); ok {
+		r1 = returnFunc(ctx, username, vmid, timeout)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockProxmoxClient_WaitForVMReady_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WaitForVMReady'
@@ -785,13 +796,12 @@ type MockProxmoxClient_WaitForVMReady_Call struct {
 //   - ctx context.Context
 //   - username string
 //   - vmid int
-//   - expectedState string
 //   - timeout time.Duration
-func (_e *MockProxmoxClient_Expecter) WaitForVMReady(ctx interface{}, username interface{}, vmid interface{}, expectedState interface{}, timeout interface{}) *MockProxmoxClient_WaitForVMReady_Call {
-	return &MockProxmoxClient_WaitForVMReady_Call{Call: _e.mock.On("WaitForVMReady", ctx, username, vmid, expectedState, timeout)}
+func (_e *MockProxmoxClient_Expecter) WaitForVMReady(ctx interface{}, username interface{}, vmid interface{}, timeout interface{}) *MockProxmoxClient_WaitForVMReady_Call {
+	return &MockProxmoxClient_WaitForVMReady_Call{Call: _e.mock.On("WaitForVMReady", ctx, username, vmid, timeout)}
 }
 
-func (_c *MockProxmoxClient_WaitForVMReady_Call) Run(run func(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration)) *MockProxmoxClient_WaitForVMReady_Call {
+func (_c *MockProxmoxClient_WaitForVMReady_Call) Run(run func(ctx context.Context, username string, vmid int, timeout time.Duration)) *MockProxmoxClient_WaitForVMReady_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -805,31 +815,26 @@ func (_c *MockProxmoxClient_WaitForVMReady_Call) Run(run func(ctx context.Contex
 		if args[2] != nil {
 			arg2 = args[2].(int)
 		}
-		var arg3 string
+		var arg3 time.Duration
 		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 time.Duration
-		if args[4] != nil {
-			arg4 = args[4].(time.Duration)
+			arg3 = args[3].(time.Duration)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
-			arg4,
 		)
 	})
 	return _c
 }
 
-func (_c *MockProxmoxClient_WaitForVMReady_Call) Return(err error) *MockProxmoxClient_WaitForVMReady_Call {
-	_c.Call.Return(err)
+func (_c *MockProxmoxClient_WaitForVMReady_Call) Return(vm *Vm, err error) *MockProxmoxClient_WaitForVMReady_Call {
+	_c.Call.Return(vm, err)
 	return _c
 }
 
-func (_c *MockProxmoxClient_WaitForVMReady_Call) RunAndReturn(run func(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error) *MockProxmoxClient_WaitForVMReady_Call {
+func (_c *MockProxmoxClient_WaitForVMReady_Call) RunAndReturn(run func(ctx context.Context, username string, vmid int, timeout time.Duration) (*Vm, error)) *MockProxmoxClient_WaitForVMReady_Call {
 	_c.Call.Return(run)
 	return _c
 }

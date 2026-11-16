@@ -40,7 +40,7 @@ func TestCreateVMPropagatesVLAN(t *testing.T) {
 		require.NoError(t, json.Unmarshal(data, &payload))
 		assert.Equal(t, float64(6), payload["net0_vlantag"])
 	}).Return(nil).Once()
-	client.EXPECT().WaitForVMReady(mock.Anything, testUserID, 200, "stopped", mock.Anything).Return(nil).Once()
+	client.EXPECT().WaitForVMReady(mock.Anything, testUserID, 200, mock.Anything).Return(&Vm{Status: "stopped", QemuReady: true}, nil).Once()
 	v := &VMAgent{proxmoxClient: client}
 	_, err := agent.JobHandlerWrapper(v.CreateVMHandler())(context.Background(), provisioningJob(t, `,"vlantag":6`))
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestCreateVMDoesNotCompleteBeforeProvisioning(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			client.EXPECT().WaitForVMReady(ctx, testUserID, 200, "stopped", expected).Return(context.DeadlineExceeded).Once()
+			client.EXPECT().WaitForVMReady(ctx, testUserID, 200, expected).Return(nil, context.DeadlineExceeded).Once()
 			v := &VMAgent{proxmoxClient: client, readyTimeout: timeout}
 			response, err := agent.JobHandlerWrapper(v.CreateVMHandler())(ctx, provisioningJob(t, ""))
 			require.ErrorIs(t, err, context.DeadlineExceeded)

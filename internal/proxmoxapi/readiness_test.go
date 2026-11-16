@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWaitForVMReadyRequiresProvisioningAndPowerState(t *testing.T) {
+func TestWaitForVMReadyRequiresProvisioningAndOperationalState(t *testing.T) {
 	for _, tt := range []struct {
 		name, body string
 		ready      bool
@@ -24,7 +24,8 @@ func TestWaitForVMReadyRequiresProvisioningAndPowerState(t *testing.T) {
 		{"initial stopped clone", `{"status":"stopped","lock":false,"qemuReady":false}`, false},
 		{"missing readiness flag", `{"status":"stopped","lock":false}`, false},
 		{"ready but locked", `{"status":"stopped","lock":true,"qemuReady":true}`, false},
-		{"ready but running", `{"status":"running","lock":false,"qemuReady":true}`, false},
+		{"ready and running", `{"status":"running","lock":false,"qemuReady":true}`, true},
+		{"paused is not operational", `{"status":"paused","lock":false,"qemuReady":true}`, false},
 		{"ready and stopped", `{"status":"stopped","lock":false,"qemuReady":true}`, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,10 +39,15 @@ func TestWaitForVMReadyRequiresProvisioningAndPowerState(t *testing.T) {
 			defer server.Close()
 			c := NewClient(&config.ProxmoxAPIConfig{APIURLs: []string{server.URL}, Timeout: 2})
 			defer c.restyClient.Close()
-			err := c.WaitForVMReady(context.Background(), "user-test", 200, "stopped", 100*time.Millisecond)
+			v, err := c.WaitForVMReady(context.Background(), "user-test", 200, 100*time.Millisecond)
 			if tt.ready {
 				require.NoError(t, err)
+				require.NotNil(t, v)
+				assert.True(t, v.QemuReady)
+				assert.False(t, v.Lock)
+				assert.Contains(t, []string{"running", "stopped"}, v.Status)
 			} else {
+				assert.Nil(t, v)
 				require.ErrorIs(t, err, context.DeadlineExceeded)
 			}
 		})
@@ -56,7 +62,7 @@ func TestWaitForVMReadyPollsThroughInitialization(t *testing.T) {
 		states := []string{
 			`{"status":"stopped","lock":false,"qemuReady":false}`,
 			`{"status":"running","lock":false,"qemuReady":false}`,
-			`{"status":"stopped","lock":false,"qemuReady":true}`,
+			`{"status":"running","lock":false,"qemuReady":true}`,
 		}
 		n := int(calls.Add(1)) - 1
 		if n >= len(states) {
@@ -67,7 +73,9 @@ func TestWaitForVMReadyPollsThroughInitialization(t *testing.T) {
 	defer server.Close()
 	c := NewClient(&config.ProxmoxAPIConfig{APIURLs: []string{server.URL}, Timeout: 2})
 	defer c.restyClient.Close()
-	require.NoError(t, c.WaitForVMReady(context.Background(), "user-test", 200, "stopped", 10*time.Second))
+	v, err := c.WaitForVMReady(context.Background(), "user-test", 200, 10*time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, "running", v.Status)
 	assert.Equal(t, int32(3), calls.Load())
 }
 
@@ -80,7 +88,9 @@ func TestWaitForVMReadyCancellation(t *testing.T) {
 		defer c.restyClient.Close()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		require.ErrorIs(t, c.WaitForVMReady(ctx, "user-test", 200, "stopped", time.Minute), context.Canceled)
+		v, err := c.WaitForVMReady(ctx, "user-test", 200, time.Minute)
+		require.ErrorIs(t, err, context.Canceled)
+		assert.Nil(t, v)
 		assert.Zero(t, calls.Load())
 	})
 	t.Run("deadline cancels in-flight HTTP", func(t *testing.T) {
@@ -89,7 +99,9 @@ func TestWaitForVMReadyCancellation(t *testing.T) {
 		c := NewClient(&config.ProxmoxAPIConfig{APIURLs: []string{server.URL}, Timeout: 30})
 		defer c.restyClient.Close()
 		start := time.Now()
-		require.ErrorIs(t, c.WaitForVMReady(context.Background(), "user-test", 200, "stopped", 100*time.Millisecond), context.DeadlineExceeded)
+		v, err := c.WaitForVMReady(context.Background(), "user-test", 200, 100*time.Millisecond)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Nil(t, v)
 		assert.Less(t, time.Since(start), 2*time.Second)
 	})
 }
@@ -101,7 +113,8 @@ func TestWaitForVMReadyHTTPErrors(t *testing.T) {
 			defer server.Close()
 			c := NewClient(&config.ProxmoxAPIConfig{APIURLs: []string{server.URL}, Timeout: 2})
 			defer c.restyClient.Close()
-			err := c.WaitForVMReady(context.Background(), "user-test", 200, "stopped", 100*time.Millisecond)
+			v, err := c.WaitForVMReady(context.Background(), "user-test", 200, 100*time.Millisecond)
+			assert.Nil(t, v)
 			if status == 404 || status == 429 || status >= 500 {
 				require.ErrorIs(t, err, context.DeadlineExceeded)
 			} else {

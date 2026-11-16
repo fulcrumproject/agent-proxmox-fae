@@ -162,12 +162,16 @@ Creation has two separate time budgets in the remote `proxmoxAPI` config:
 use those defaults, including older remote configurations. The existing
 `timeout` still controls ordinary HTTP requests (default 30 seconds).
 
-A stopped/unlocked clone is not necessarily initialized: the create job also
-requires `qemuReady=true` before completing or applying firewall rules.
-The provisioning wait respects job cancellation. **The original create-to-Stopped
-contract is retained**: the agent never issues an automatic StopVM to conceal a
-ready VM remaining running. Such an environment needs an explicit lifecycle
-decision before the full integration test can pass.
+A stopped/unlocked clone is not necessarily initialized. Provisioning completes
+only when `qemuReady=true`, the VM is unlocked, and its state is `running` or
+`stopped`. The provisioning wait respects job cancellation.
+
+**The original create-to-Stopped contract is retained:** after readiness, the
+agent stops a running VM and waits for it to be stopped/unlocked before completing
+the create job or applying firewall rules. A VM already stopped needs no stop
+request. Stop errors/timeouts fail the job; the agent never stops a VM merely
+because its initialization is taking time. Readiness is not re-required after
+power-off, when the guest agent may no longer respond.
 
 The existing `user-<consumer-id>` / `pool-<consumer-id>` identity mapping is
 preserved. The FAE API token, scoped `PVE-User` header and guest login
@@ -328,7 +332,8 @@ INTEGRATION_TESTS=1 go test -count=1 -v -timeout=60m ./internal/proxmoxapi \
 ```
 
 The test creates a uniquely named user/pool and VM, then verifies:
-- User/resource/template access and VM creation/readiness.
+- User/resource/template access and VM creation/readiness in either power state.
+- Conditional stop after readiness, preserving the final Stopped state.
 - Separate CPU, memory and disk updates, preserving unrelated fields.
 - Firewall rule creation, retrieval and deletion.
 - VM start, status/metric reads and stop.
