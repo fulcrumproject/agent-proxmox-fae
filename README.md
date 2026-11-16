@@ -258,6 +258,28 @@ go test ./...
 go test -v ./internal/vmagent
 ```
 
+### Code coverage
+
+Coverage uses Go's built-in tools, without an external reporting service or token:
+
+```bash
+INTEGRATION_TESTS=0 go test -count=1 -coverpkg=./... -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out > coverage.txt
+go tool cover -html=coverage.out -o coverage.html
+```
+
+Open `coverage.html` locally for source-level details. The report measures Go
+statement coverage across all module packages, including unexecuted code at
+zero. It covers offline unit, HTTP-contract and handler tests, not live FAE
+integration or a full Fulcrum Core deployment. No percentage threshold is enforced.
+
+GitHub Actions publishes the total and per-function detail in the **Test job
+summary**, with a link to a `coverage-report-<attempt>` artifact containing
+the HTML, text and raw profile, retained for seven days. Partial reports may
+be uploaded after failed tests, but no successful total is shown in that case.
+Missing or invalid reports after successful tests fail report generation.
+Coverage artifacts are excluded from release downloads and assets.
+
 ### Integration Tests
 
 Integration tests contact a real FAE **test environment**. Normal

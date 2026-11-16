@@ -25,14 +25,65 @@ jobs:
               run: go mod download
 
             - name: Run tests
-              run: go test -v ./... -coverprofile=coverage.out
+              id: tests
+              env:
+                  INTEGRATION_TESTS: "0"
+              run: go test -count=1 -v -coverpkg=./... -coverprofile=coverage.out ./...
 
-            - name: Upload coverage
-              uses: codecov/codecov-action@v7
-              if: always()
+            - name: Generate coverage reports
+              id: coverage
+              if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+              run: |
+                  test -s coverage.out
+                  go tool cover -func=coverage.out > coverage.txt
+                  go tool cover -html=coverage.out -o coverage.html
+
+            - name: Upload coverage reports
+              id: coverage_artifact
+              if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+              uses: actions/upload-artifact@v7
               with:
-                  files: ./coverage.out
-                  fail_ci_if_error: false
+                  name: coverage-report-${{ github.run_attempt }}
+                  path: |
+                      coverage.out
+                      coverage.txt
+                      coverage.html
+                  if-no-files-found: error
+                  retention-days: 7
+
+            - name: Publish coverage summary
+              if: ${{ !cancelled() }}
+              env:
+                  TEST_OUTCOME: ${{ steps.tests.outcome }}
+                  COVERAGE_OUTCOME: ${{ steps.coverage.outcome }}
+                  COVERAGE_ARTIFACT_URL: ${{ steps.coverage_artifact.outputs.artifact-url }}
+              run: |
+                  {
+                      echo "## Go code coverage"
+                      echo
+                      if [[ "$TEST_OUTCOME" == "success" && "$COVERAGE_OUTCOME" == "success" ]]; then
+                          test -s coverage.txt
+                          total=$(awk '$1 == "total:" { print $3 }' coverage.txt)
+                          [[ "$total" =~ ^[0-9]+([.][0-9]+)?%$ ]]
+                          printf '**Statements: %s**\n\n' "$total"
+                          echo "All module packages, including unexecuted code at zero."
+                          echo "Offline unit, HTTP-contract and handler tests; live FAE tests are excluded."
+                          echo "No coverage percentage threshold is enforced."
+                          echo
+                          echo '<details><summary>Coverage by function</summary>'
+                          echo
+                          echo '```text'
+                          cat coverage.txt
+                          echo '```'
+                          echo '</details>'
+                      else
+                          echo "Coverage incomplete: tests or report generation did not succeed. No total is published."
+                      fi
+                      if [[ -n "$COVERAGE_ARTIFACT_URL" ]]; then
+                          echo
+                          printf '[Download coverage reports (HTML, text, raw profile)](%s)\n' "$COVERAGE_ARTIFACT_URL"
+                      fi
+                  } >> "$GITHUB_STEP_SUMMARY"
 
     build:
         name: Build
@@ -87,9 +138,10 @@ jobs:
         steps:
             - uses: actions/checkout@v7
 
-            - name: Download all artifacts
+            - name: Download release artifacts
               uses: actions/download-artifact@v8
               with:
+                  pattern: fulcrum-proxmox-agent-*
                   path: ./artifacts
 
             - name: Create checksums
