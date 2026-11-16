@@ -64,9 +64,10 @@ type VMProperties = VMCreateProperties
 
 // NetworkConfig represents network pool allocation
 type NetworkConfig struct {
-	IPAddress string `json:"ipaddress"` // Static IP from pool
-	Netmask   int    `json:"netmask"`   // CIDR notation (e.g., 24)
-	Gateway   string `json:"gateway"`   // Gateway IP from pool
+	IPAddress string `json:"ipaddress"`         // Static IP from pool
+	Netmask   int    `json:"netmask"`           // CIDR notation (e.g., 24)
+	Gateway   string `json:"gateway"`           // Gateway IP from pool
+	VLANTag   *int   `json:"vlantag,omitempty"` // Optional 802.1Q tag from pool (1-4094)
 }
 
 // FirewallRule represents a VM firewall rule
@@ -98,6 +99,7 @@ func MakeUserIDs(consumerID string) (userID, poolID string) {
 type VMAgent struct {
 	stdAgent             *stdagent.Agent
 	proxmoxClient        ProxmoxClient
+	readyTimeout         time.Duration
 	proxmoxClientFactory func(config *config.ProxmoxAPIConfig) ProxmoxClient
 }
 
@@ -136,6 +138,7 @@ func NewVMAgent(
 
 func (v *VMAgent) ConnectHandler(ctx context.Context, info *agent.AgentInfo[RemoteConfig]) error {
 	v.proxmoxClient = v.proxmoxClientFactory(info.Config.ProxmoxAPI)
+	v.readyTimeout = info.Config.ProxmoxAPI.ReadinessTimeout()
 
 	// Ping proxmox API
 	ping, err := v.proxmoxClient.Ping()

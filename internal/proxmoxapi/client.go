@@ -1,7 +1,9 @@
 package proxmoxapi
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -16,9 +18,10 @@ import (
 
 // Client represents a REST client for the Proxmox API with multi-endpoint support
 type Client struct {
-	restyClient *resty.Client
-	endpoints   []string     // Available API endpoints
-	mu          sync.RWMutex // Thread-safe access to endpoints
+	restyClient   *resty.Client
+	createTimeout time.Duration
+	endpoints     []string     // Available API endpoints
+	mu            sync.RWMutex // Thread-safe access to endpoints
 }
 
 // HTTPError retains the response status, so callers can distinguish missing
@@ -219,8 +222,9 @@ func NewClient(cfg *config.ProxmoxAPIConfig) *Client {
 	slog.Info("Initialized Proxmox client", "endpoints", endpoints)
 
 	return &Client{
-		restyClient: restyClient,
-		endpoints:   endpoints,
+		restyClient:   restyClient,
+		createTimeout: cfg.CreationTimeout(),
+		endpoints:     endpoints,
 	}
 }
 
@@ -385,6 +389,7 @@ func (c *Client) GetNodesMetrics() (*NodesMetrics, error) {
 func (c *Client) CreateVMFromTemplate(username string, vmReq *vmagent.VmCreateFromTemplate) error {
 	_, err := c.executeWithFailover("createVMFromTemplate", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
+			SetTimeout(c.createTimeout).
 			SetHeader("PVE-User", username).
 			SetBody(vmReq).
 			Post(baseURL + "/pve/vms/create/from-template")
@@ -395,10 +400,15 @@ func (c *Client) CreateVMFromTemplate(username string, vmReq *vmagent.VmCreateFr
 
 // GetVM retrieves a specific VM by ID
 func (c *Client) GetVM(username string, vmid int) (*vmagent.Vm, error) {
+	return c.getVM(context.Background(), username, vmid)
+}
+
+func (c *Client) getVM(ctx context.Context, username string, vmid int) (*vmagent.Vm, error) {
 	var vm vmagent.Vm
 
 	_, err := c.executeWithFailover("getVM", func(baseURL string) (*resty.Response, error) {
 		return c.restyClient.R().
+			SetContext(ctx).
 			SetHeader("PVE-User", username).
 			SetResult(&vm).
 			Get(baseURL + fmt.Sprintf("/pve/vms/%d", vmid))
@@ -479,6 +489,36 @@ func (c *Client) WaitForVMState(username string, vmid int, expectedState string,
 	}
 
 	return fmt.Errorf("timeout waiting for VM %d to reach state '%s' with lock=false after %v", vmid, expectedState, timeout)
+}
+
+// WaitForVMReady waits for provisioning and the requested power state, not just
+// a transient stopped/unlocked clone. It never starts, stops or deletes the VM.
+func (c *Client) WaitForVMReady(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	lastState := "not observed"
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("waiting for VM %d provisioning in state %q (%s): %w", vmid, expectedState, lastState, err)
+		}
+		vm, err := c.getVM(ctx, username, vmid)
+		if err == nil {
+			lastState = fmt.Sprintf("status=%s lock=%t qemuReady=%t", vm.Status, vm.Lock, vm.QemuReady)
+			if vm.Status == expectedState && !vm.Lock && vm.QemuReady {
+				return nil
+			}
+		} else {
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 && httpErr.StatusCode != 404 && httpErr.StatusCode != 429 {
+				return err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for VM %d provisioning in state %q (%s): %w", vmid, expectedState, lastState, ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // OpenVNC opens VNC access for a virtual machine

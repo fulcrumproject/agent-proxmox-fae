@@ -22,7 +22,7 @@ func TestCreateVMFAEPayload(t *testing.T) {
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"node":"node1","vmid":200,"templatevmid":100,"name":"test-vm","pool":"pool-testuser","cpus":2,"memory":1024,"disksize":20,"loginuser":"testuser","loginsshkey":"ssh-ed25519 test-key","net0_bridge":"vmbr","net0_ipaddress":"192.0.2.10","net0_netmask":24,"net0_gateway":"192.0.2.1","net0_nameserver":"192.0.2.53","net0_searchdomain":"example.test"}`, string(body))
 	}).Return(nil).Once()
-	client.EXPECT().WaitForVMState(testUserID, 200, "stopped", mock.Anything).Return(nil).Once()
+	client.EXPECT().WaitForVMReady(mock.Anything, testUserID, 200, "stopped", mock.Anything).Return(nil).Once()
 	vmAgent := &VMAgent{proxmoxClient: client}
 	response, err := agent.JobHandlerWrapper(vmAgent.CreateVMHandler())(context.Background(), &agent.RawJob{
 		ID:      "test-job",

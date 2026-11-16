@@ -17,7 +17,7 @@ import (
 // These tests exercise the real HTTP client without touching a Proxmox cluster.
 func TestClientHTTPContract(t *testing.T) {
 	const username = "user-test"
-	const createBody = `{"node":"node1","vmid":200,"templatevmid":100,"name":"test-vm","pool":"pool-test","cpus":2,"memory":1024,"disksize":20,"loginuser":"testuser","loginsshkey":"ssh-ed25519 test-key","net0_bridge":"vmbr","net0_ipaddress":"192.0.2.10","net0_netmask":24,"net0_gateway":"192.0.2.1","net0_nameserver":"192.0.2.53","net0_searchdomain":"example.test"}`
+	const createBody = `{"node":"node1","vmid":200,"templatevmid":100,"name":"test-vm","pool":"pool-test","cpus":2,"memory":1024,"disksize":20,"loginuser":"testuser","loginsshkey":"ssh-ed25519 test-key","net0_bridge":"vmbr","net0_vlantag":6,"net0_ipaddress":"192.0.2.10","net0_netmask":24,"net0_gateway":"192.0.2.1","net0_nameserver":"192.0.2.53","net0_searchdomain":"example.test"}`
 	var createReq vmagent.VmCreateFromTemplate
 	require.NoError(t, json.Unmarshal([]byte(createBody), &createReq))
 	pos := 0
@@ -60,12 +60,13 @@ func TestClientHTTPContract(t *testing.T) {
 		{"create VM", "POST", "/pve/vms/create/from-template", username, createBody, "", func(t *testing.T, c *Client) error {
 			return c.CreateVMFromTemplate(username, &createReq)
 		}},
-		{"get VM", "GET", "/pve/vms/200", username, "", `{"vmid":200,"status":"stopped","lock":false,"maxcpu":2,"maxmem":1073741824,"nets":{},"disks":[],"qemuReady":false}`, func(t *testing.T, c *Client) error {
+		{"get VM", "GET", "/pve/vms/200", username, "", `{"vmid":200,"status":"stopped","lock":false,"maxcpu":2,"maxmem":1073741824,"nets":{},"disks":[],"qemuReady":true}`, func(t *testing.T, c *Client) error {
 			result, err := c.GetVM(username, 200)
 			if assert.NoError(t, err) {
 				assert.Equal(t, 200, result.VMID)
 				assert.Equal(t, "stopped", result.Status)
 				assert.False(t, result.Lock)
+				assert.True(t, result.QemuReady)
 				assert.Equal(t, float64(2), result.MaxCPU)
 			}
 			return err

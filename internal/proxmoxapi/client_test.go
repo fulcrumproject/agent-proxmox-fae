@@ -1,11 +1,17 @@
 package proxmoxapi
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh"
 )
 
 func requireIntegrationTest(t *testing.T) {
@@ -117,6 +124,24 @@ func TestClientVMLifecycle(t *testing.T) {
 	require.NoError(t, err, "Set PROXMOX_AGENT_TEST_NETMASK to the IPv4 prefix length")
 	require.GreaterOrEqual(t, netmask, 8)
 	require.LessOrEqual(t, netmask, 32)
+	var vlanTag *int
+	if raw := os.Getenv("PROXMOX_AGENT_TEST_VLAN_TAG"); raw != "" {
+		tag, err := strconv.Atoi(raw)
+		require.NoError(t, err, "PROXMOX_AGENT_TEST_VLAN_TAG must be an integer")
+		require.GreaterOrEqual(t, tag, 1)
+		require.LessOrEqual(t, tag, 4094)
+		vlanTag = &tag
+	}
+	readyTimeout := config.DefaultReadyTimeout
+	if raw := os.Getenv("PROXMOX_AGENT_PROXMOX_API_READY_TIMEOUT"); raw != "" {
+		seconds, err := strconv.Atoi(raw)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, seconds, 0)
+		if seconds > 0 {
+			readyTimeout = time.Duration(seconds) * time.Second
+		}
+	}
+	sshKey := createIntegrationSSHKey(t)
 
 	userID, poolID := createTestUser(t, client)
 	_, err = client.GetUser(userID)
@@ -140,27 +165,32 @@ func TestClientVMLifecycle(t *testing.T) {
 	vmName := "test-vm-" + uuid.NewString()[:8]
 	vmReq := &vmagent.VmCreateFromTemplate{
 		Node: resources.Nodes[0], VMID: vmid, TemplateVMID: templateID,
-		Name: vmName, Pool: poolID, CPUs: 1, Memory: 512, DiskSize: 20,
-		Bridge: "vmbr", IPAddress: ipAddress, Netmask: netmask, Gateway: gateway,
+		Name: vmName, Pool: poolID, CPUs: 4, Memory: 4096, DiskSize: 20,
+		Bridge: "vmbr", VLANTag: vlanTag, IPAddress: ipAddress, Netmask: netmask, Gateway: gateway,
 		Nameserver:   os.Getenv("PROXMOX_AGENT_TEST_NAMESERVER"),
 		SearchDomain: os.Getenv("PROXMOX_AGENT_TEST_SEARCHDOMAIN"),
 		LoginUser:    "fulcrum",
-		LoginSSHKey:  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum",
+		LoginSSHKey:  sshKey,
 	}
-	// Also run cleanup after a partially failed create. The name guard prevents
-	// deleting someone else's VM if the proposed VMID was taken concurrently.
-	t.Cleanup(func() { cleanupTestVM(t, client, userID, vmid, vmName) })
+	// Preserve failed/ambiguous provisioning for operator inspection, including a
+	// create request that timed out while FAE continues working in the background.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("No automatic cleanup after failure: inspect VM %d (%s), user %s, pool %s", vmid, vmName, userID, poolID)
+		}
+	})
 	t.Logf("Creating VM %d (%s), node %s, template %s, network %s/%d", vmid, vmName, vmReq.Node, templateName, ipAddress, netmask)
 	require.NoError(t, client.CreateVMFromTemplate(userID, vmReq))
-	require.NoError(t, client.WaitForVMState(userID, vmid, "stopped", 60*time.Second))
+	require.NoError(t, client.WaitForVMReady(context.Background(), userID, vmid, "stopped", readyTimeout))
 	vm, err := client.GetVM(userID, vmid)
 	require.NoError(t, err)
 	require.Equal(t, vmid, vm.VMID)
 	require.Equal(t, vmName, vm.Name)
 	require.False(t, vm.Lock)
+	require.True(t, vm.QemuReady)
 
 	// Partial updates must not send zeroes for unrelated fields.
-	cpus, memory, diskSize := 2, 1024, 21
+	cpus, memory, diskSize := 2, 2048, 21
 	require.NoError(t, client.PatchVM(userID, vmid, &vmagent.VmPatch{CPUs: &cpus}))
 	updated, err := client.GetVM(userID, vmid)
 	require.NoError(t, err)
@@ -209,12 +239,12 @@ func TestClientVMLifecycle(t *testing.T) {
 	require.NoError(t, client.WaitForVMState(userID, vmid, "running", 60*time.Second))
 	metrics, err := client.GetVM(userID, vmid)
 	require.NoError(t, err)
-	assert.Equal(t, "running", metrics.Status)
-	assert.Equal(t, float64(cpus), metrics.MaxCPU)
-	assert.Equal(t, int64(memory)*1024*1024, metrics.MaxMem)
+	require.Equal(t, "running", metrics.Status)
+	require.Equal(t, float64(cpus), metrics.MaxCPU)
+	require.Equal(t, int64(memory)*1024*1024, metrics.MaxMem)
 
 	// Console access is not an agent job; require an approved source IP to test it.
-	t.Run("VNC", func(t *testing.T) {
+	if !t.Run("VNC", func(t *testing.T) {
 		sourceIP := os.Getenv("PROXMOX_AGENT_TEST_VNC_SOURCE_IP")
 		if sourceIP == "" {
 			t.Skip("Set PROXMOX_AGENT_TEST_VNC_SOURCE_IP to exercise optional console access")
@@ -222,7 +252,9 @@ func TestClientVMLifecycle(t *testing.T) {
 		vnc, err := client.OpenVNC(userID, vmid, &VncEnable{SourceIP: sourceIP})
 		require.NoError(t, err)
 		require.NotEmpty(t, vnc.Host)
-	})
+	}) {
+		return // Preserve the VM if the optional console check fails.
+	}
 
 	require.NoError(t, client.StopVM(userID, vmid))
 	require.NoError(t, client.WaitForVMState(userID, vmid, "stopped", 60*time.Second))
@@ -255,39 +287,24 @@ func waitForVMDeleted(t *testing.T, client *Client, username string, vmid int, t
 	return false
 }
 
-func cleanupTestVM(t *testing.T, client *Client, username string, vmid int, name string) {
+// Never expose a public test VM using the shared private key in the repository.
+func createIntegrationSSHKey(t *testing.T) string {
 	t.Helper()
-	vm, err := client.GetVM(username, vmid)
-	if isNotFound(err) {
-		return
-	}
-	if err != nil {
-		t.Errorf("Cannot inspect test VM %d for cleanup: %v", vmid, err)
-		return
-	}
-	if vm.Name != name {
-		t.Errorf("Refusing to clean up VM %d: name is not %q", vmid, name)
-		return
-	}
-	if err := client.WaitForVMState(username, vmid, vm.Status, 2*time.Minute); err != nil {
-		t.Errorf("Test VM %d not ready for cleanup: %v", vmid, err)
-		return
-	}
-	if vm.Status != "stopped" {
-		if err := client.StopVM(username, vmid); err != nil {
-			t.Errorf("Cannot stop test VM %d for cleanup: %v", vmid, err)
+	dir, err := os.MkdirTemp("", "fae-integration-key-")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("SSH key retained for test-VM inspection: %s", filepath.Join(dir, "vm_key"))
 			return
 		}
-	}
-	if err := client.WaitForVMState(username, vmid, "stopped", 60*time.Second); err != nil {
-		t.Errorf("Test VM %d did not stop during cleanup: %v", vmid, err)
-		return
-	}
-	if err := client.DeleteVM(username, vmid); err != nil {
-		t.Errorf("Cannot delete test VM %d during cleanup: %v", vmid, err)
-		return
-	}
-	if !waitForVMDeleted(t, client, username, vmid, 2*time.Minute) {
-		t.Errorf("Test VM %d deletion could not be confirmed during cleanup", vmid)
-	}
+		assert.NoError(t, os.RemoveAll(dir))
+	})
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	block, err := ssh.MarshalPrivateKey(private, "fae-integration")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "vm_key"), pem.EncodeToMemory(block), 0600))
+	key, err := ssh.NewPublicKey(public)
+	require.NoError(t, err)
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
 }

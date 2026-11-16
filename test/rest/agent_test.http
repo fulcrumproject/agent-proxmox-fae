@@ -1,6 +1,6 @@
 @baseUrl = http://localhost:3000/api/v1
 @adminToken = change-me
-@testSSHKey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAuETCtsaepU0mPIGai3yAAX4hguQ6XQss0wCkVqopLt test-vm-key@fulcrum
+@testSSHKey = REPLACE_WITH_A_FRESH_SSH_PUBLIC_KEY
 
 ### Create Service Option Type for VM Templates
 # @name createTemplateOptionType
@@ -337,7 +337,7 @@ Content-Type: application/json
                     "timeout": {
                         "type": "integer",
                         "label": "Request Timeout (seconds)",
-                        "default": 300,
+                        "default": 30,
                         "validators": [
                             {
                                 "type": "min",
@@ -346,6 +346,16 @@ Content-Type: application/json
                                 }
                             }
                         ]
+                    },
+                    "createTimeout": {
+                        "type": "integer",
+                        "label": "Create HTTP Timeout (seconds)",
+                        "default": 600
+                    },
+                    "readyTimeout": {
+                        "type": "integer",
+                        "label": "VM Provisioning Timeout (seconds)",
+                        "default": 1800
                     },
                     "debug": {
                         "type": "boolean",
@@ -390,17 +400,19 @@ Content-Type: application/json
 @poolId = {{createNetConfigPool.response.body.$.id}}
 
 ### Add Pool Value
+# Replace this documentation address and VLAN with the allocation for your cluster.
 POST {{baseUrl}}/service-pool-values
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
   "servicePoolId": "{{poolId}}",
-  "name": "172.30.173.106",
+  "name": "192.0.2.10",
   "value": {
-    "ipaddress": "172.30.173.106",
+    "ipaddress": "192.0.2.10",
     "netmask": 24,
-    "gateway": "172.30.173.1"
+    "gateway": "192.0.2.1",
+    "vlantag": 6
   }
 }
 
@@ -428,8 +440,10 @@ Authorization: Bearer {{adminToken}}
                 "https://172.30.173.231:5297"
             ],
             "insecureSkipTls": true,
-            "timeout": 600,
-            "debug": true
+            "timeout": 30,
+            "createTimeout": 600,
+            "readyTimeout": 1800,
+            "debug": false
         }
    }
 }

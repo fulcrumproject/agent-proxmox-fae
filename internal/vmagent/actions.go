@@ -8,9 +8,9 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/fulcrumproject/agent-lib-go/pkg/agent"
+	"github.com/fulcrumproject/agent-proxmox-fae/internal/config"
 )
 
 // extractUserAndVMID extracts the username from job service info (for raw services)
@@ -61,6 +61,9 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 		}
 		if job.Params.NetConfig == nil {
 			return nil, fmt.Errorf("netconfig is required")
+		}
+		if tag := job.Params.NetConfig.VLANTag; tag != nil && (*tag < 1 || *tag > 4094) {
+			return nil, fmt.Errorf("netconfig.vlantag must be between 1 and 4094")
 		}
 
 		// Extract user from job and create prefixed IDs
@@ -146,6 +149,7 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 			LoginPass:    job.Params.LoginPass,
 			LoginSSHKey:  job.Params.LoginSSHKey,
 			Bridge:       "vmbr", // Infrastructure bridge; VNet/VDC provisioning is outside this agent.
+			VLANTag:      job.Params.NetConfig.VLANTag,
 			IPAddress:    job.Params.NetConfig.IPAddress,
 			Netmask:      job.Params.NetConfig.Netmask,
 			Gateway:      job.Params.NetConfig.Gateway,
@@ -162,9 +166,14 @@ func (v *VMAgent) CreateVMHandler() agent.JobHandler[VMProperties, VMProperties,
 
 		slog.Info("Successfully created VM", "vmid", nextID, "name", job.Service.Name, "user", username)
 
-		// Wait for VM to be ready (in stopped state and not locked)
-		slog.Info("Waiting for VM to be ready", "vmid", nextID)
-		err = v.proxmoxClient.WaitForVMState(username, nextID, "stopped", 60*time.Second)
+		// The first stopped/unlocked response can precede guest initialization.
+		// Require provisioning readiness as well, without silently stopping the VM.
+		timeout := v.readyTimeout
+		if timeout <= 0 {
+			timeout = config.DefaultReadyTimeout
+		}
+		slog.Info("Waiting for VM provisioning", "vmid", nextID, "timeout", timeout)
+		err = v.proxmoxClient.WaitForVMReady(ctx, username, nextID, "stopped", timeout)
 		if err != nil {
 			slog.Error("Failed waiting for VM to be ready", "vmid", nextID, "error", err)
 			return nil, fmt.Errorf("VM created but failed to become ready: %w", err)

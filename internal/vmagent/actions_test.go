@@ -187,7 +187,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				// Use MatchedBy to accept any node from the available nodes
 				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(100, 100, "test-vm", "pool1", 2, 1024, 20)).Return(nil).Once()
-				mockClient.EXPECT().WaitForVMState(testUserID, 100, "stopped", mock.Anything).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMReady(mock.Anything, testUserID, 100, "stopped", mock.Anything).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -448,7 +448,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(104, 100, "test-vm", "pool1", 1, 512, 10)).Return(nil).Once()
-				mockClient.EXPECT().WaitForVMState(testUserID, 104, "stopped", mock.Anything).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMReady(mock.Anything, testUserID, 104, "stopped", mock.Anything).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -487,7 +487,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(105, 100, "test-vm", "pool1", 1, 512, 10)).Return(nil).Once()
-				mockClient.EXPECT().WaitForVMState(testUserID, 105, "stopped", mock.Anything).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMReady(mock.Anything, testUserID, 105, "stopped", mock.Anything).Return(nil).Once()
 			},
 			expectError: false,
 		},
@@ -613,7 +613,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(108, 100, "test-vm-firewall", "pool1", 2, 2048, 30)).Return(nil).Once()
-				mockClient.EXPECT().WaitForVMState(testUserID, 108, "stopped", mock.Anything).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMReady(mock.Anything, testUserID, 108, "stopped", mock.Anything).Return(nil).Once()
 				// Expect firewall rule calls
 				mockClient.EXPECT().AddVMFirewallRule(testUserID, 108, mock.MatchedBy(func(rule *FirewallRule) bool {
 					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "22" && rule.Comment == "Allow SSH"
@@ -668,7 +668,7 @@ func TestVMAgent_CreateVMHandler(t *testing.T) {
 				}
 				mockClient.EXPECT().GetUserPools(testUserID).Return(userResources, nil).Once()
 				mockClient.EXPECT().CreateVMFromTemplate(testUserID, matchVmCreateFromTemplate(109, 101, "test-vm-firewall-fail", "pool1", 1, 1024, 20)).Return(nil).Once()
-				mockClient.EXPECT().WaitForVMState(testUserID, 109, "stopped", mock.Anything).Return(nil).Once()
+				mockClient.EXPECT().WaitForVMReady(mock.Anything, testUserID, 109, "stopped", mock.Anything).Return(nil).Once()
 				// Firewall rule fails but VM creation should still succeed
 				mockClient.EXPECT().AddVMFirewallRule(testUserID, 109, mock.MatchedBy(func(rule *FirewallRule) bool {
 					return rule.Type == "in" && rule.Proto == "tcp" && rule.Dport == "8080"

@@ -63,8 +63,9 @@ func TestVMAgent_ConnectHandler_Success(t *testing.T) {
 	agentInfo := &agent.AgentInfo[RemoteConfig]{
 		Config: &RemoteConfig{
 			ProxmoxAPI: &config.ProxmoxAPIConfig{
-				APIURLs:  []string{"https://proxmox.example.com:8006"},
-				APIToken: "test-token-12345",
+				APIURLs:      []string{"https://proxmox.example.com:8006"},
+				APIToken:     "test-token-12345",
+				ReadyTimeout: 900,
 			},
 		},
 	}
@@ -76,4 +77,5 @@ func TestVMAgent_ConnectHandler_Success(t *testing.T) {
 	// Verify success
 	require.NoError(t, err, "Connect handler should succeed")
 	assert.NotNil(t, vmAgent.proxmoxClient, "Proxmox client should be set after successful connection")
+	assert.Equal(t, agentInfo.Config.ProxmoxAPI.ReadinessTimeout(), vmAgent.readyTimeout)
 }

@@ -142,7 +142,7 @@ The agent integrates with Proxmox Virtual Environment through the Opiquad Enhanc
 ### FAE API Compatibility
 
 The client targets the FAE 0.17 API, with the reference schema in
-`internal/proxmoxapi/openapi.json` (version 0.17.5.817). Configure the FAE
+`internal/proxmoxapi/openapi.json` (version 0.17.5.822). Configure the FAE
 **base URL**, for example `https://fae-test.example:5297`, without `/pve`
 or `/docs`. The client uses `/pve/...` routes and POST for start/stop;
 the old `/fae/v1/...` routes are not supported.
@@ -152,8 +152,22 @@ Fulcrum service properties remain unchanged: `cpu`, `memory`, `disk`,
 to FAE's `cpus` and `net0_*` fields and omits fields not supplied in partial
 updates. It uses `net0_bridge: "vmbr"` for the infrastructure network.
 The operator must supply IP/prefix/gateway values appropriate to that
-bridge through the existing Fulcrum network pool. The agent does not
-provision vnets, VDCs, DHCP or routing.
+bridge through the existing Fulcrum network pool. Tagged allocations can include
+`netconfig.vlantag` (1–4094), forwarded as `net0_vlantag`; omit it for an
+untagged network. The agent does not provision vnets, VDCs, DHCP or routing.
+
+Creation has two separate time budgets in the remote `proxmoxAPI` config:
+`createTimeout` for the create HTTP request (default 600 seconds), and
+`readyTimeout` for provisioning (default 1800 seconds). Zero or omitted values
+use those defaults, including older remote configurations. The existing
+`timeout` still controls ordinary HTTP requests (default 30 seconds).
+
+A stopped/unlocked clone is not necessarily initialized: the create job also
+requires `qemuReady=true` before completing or applying firewall rules.
+The provisioning wait respects job cancellation. **The original create-to-Stopped
+contract is retained**: the agent never issues an automatic StopVM to conceal a
+ready VM remaining running. Such an environment needs an explicit lifecycle
+decision before the full integration test can pass.
 
 The existing `user-<consumer-id>` / `pool-<consumer-id>` identity mapping is
 preserved. The FAE API token, scoped `PVE-User` header and guest login
@@ -262,6 +276,8 @@ PROXMOX_AGENT_PROXMOX_API_URLS=https://fae-test.example:5297
 PROXMOX_AGENT_PROXMOX_API_TOKEN="YOUR_FAE_TOKEN"
 PROXMOX_AGENT_PROXMOX_API_INSECURE_SKIP_TLS=false
 PROXMOX_AGENT_PROXMOX_API_TIMEOUT=30
+PROXMOX_AGENT_PROXMOX_API_CREATE_TIMEOUT=600
+PROXMOX_AGENT_PROXMOX_API_READY_TIMEOUT=1800
 PROXMOX_AGENT_PROXMOX_API_DEBUG=false
 ```
 
@@ -291,7 +307,8 @@ PROXMOX_AGENT_TEST_TEMPLATE=YOUR_LINUX_CLOUD_INIT_TEMPLATE
 PROXMOX_AGENT_TEST_IPADDRESS=YOUR_RESERVED_TEST_IPV4_ADDRESS
 PROXMOX_AGENT_TEST_NETMASK=24
 PROXMOX_AGENT_TEST_GATEWAY=YOUR_TEST_GATEWAY
-# Optional:
+# Optional (set the VLAN for tagged networks):
+PROXMOX_AGENT_TEST_VLAN_TAG=
 PROXMOX_AGENT_TEST_NAMESERVER=
 PROXMOX_AGENT_TEST_SEARCHDOMAIN=
 PROXMOX_AGENT_TEST_VNC_SOURCE_IP=
@@ -300,10 +317,13 @@ PROXMOX_AGENT_TEST_VNC_SOURCE_IP=
 Reserve an unused address on the infrastructure bridge (`vmbr`). Do not
 copy an address from a production VM or assume DHCP is available. Choose
 a Linux cloud-init template with a base disk no larger than 20 GiB.
-Missing/invalid required fixtures fail before user/VM creation.
+The test provisions 4 CPUs and 4096 MiB RAM to allow guest initialization and
+updates. Missing/invalid required fixtures fail before user/VM creation.
+A fresh Ed25519 SSH key is generated for each run; the shared repository key is
+not used on public test VMs.
 
 ```bash
-INTEGRATION_TESTS=1 go test -count=1 -v -timeout=15m ./internal/proxmoxapi \
+INTEGRATION_TESTS=1 go test -count=1 -v -timeout=60m ./internal/proxmoxapi \
   -run '^TestClientVMLifecycle$'
 ```
 
@@ -314,9 +334,12 @@ The test creates a uniquely named user/pool and VM, then verifies:
 - VM start, status/metric reads and stop.
 - VM deletion, confirmed by HTTP 404, not an arbitrary API failure.
 
-VM cleanup is also attempted after failures, guarded by the unique VM name.
-Any cleanup error is reported as a failure. **FAE exposes no user/pool
-deletion endpoint:** their IDs are logged for operator cleanup.
+On success, the test deletes the VM and its temporary SSH key. **On failure,
+it does not stop or delete the VM**: the VM identity and protected local SSH-key
+path are logged for operator inspection. A timed-out create may still finish
+on FAE; do not assume absence from an immediate 404 or blindly rerun with the
+same IP. Explicit cleanup is required after investigating a failed run.
+**FAE exposes no user/pool deletion endpoint:** their IDs are logged for operator cleanup.
 `TestClientCreateAndGetUser` and `TestClientGetTemplates` also create users,
 so running the entire integration suite is not read-only.
 

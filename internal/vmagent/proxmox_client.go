@@ -1,6 +1,9 @@
 package vmagent
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // ProxmoxClient defines the interface for interacting with Proxmox API
 type ProxmoxClient interface {
@@ -19,6 +22,7 @@ type ProxmoxClient interface {
 	StartVM(username string, vmid int) error
 	StopVM(username string, vmid int) error
 	WaitForVMState(username string, vmid int, expectedState string, timeout time.Duration) error
+	WaitForVMReady(ctx context.Context, username string, vmid int, expectedState string, timeout time.Duration) error
 
 	// Firewall management
 	AddVMFirewallRule(username string, vmid int, rule *FirewallRule) error
@@ -71,7 +75,8 @@ type Vm struct {
 	NetIn     int64   `json:"netin"`
 	NetOut    int64   `json:"netout"`
 	Uptime    int64   `json:"uptime"`
-	Lock      bool    `json:"lock"` // True for eg. when VM is migrating
+	Lock      bool    `json:"lock"`      // True for eg. when VM is migrating
+	QemuReady bool    `json:"qemuReady"` // FAE provisioning/guest readiness flag
 }
 
 // VmCreateFromTemplate represents the request for creating a new VM from a template
@@ -88,6 +93,7 @@ type VmCreateFromTemplate struct {
 	LoginPass    string `json:"loginpass,omitempty"`
 	LoginSSHKey  string `json:"loginsshkey,omitempty"`
 	Bridge       string `json:"net0_bridge"`
+	VLANTag      *int   `json:"net0_vlantag,omitempty"`
 	IPAddress    string `json:"net0_ipaddress,omitempty"`
 	Netmask      int    `json:"net0_netmask,omitempty"`
 	Gateway      string `json:"net0_gateway,omitempty"`
