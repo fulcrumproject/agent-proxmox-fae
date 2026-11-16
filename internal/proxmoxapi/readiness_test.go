@@ -113,6 +113,26 @@ func TestWaitForVMReadyHTTPErrors(t *testing.T) {
 	}
 }
 
+func TestGetVMDoesNotReuseReadinessFromFailedEndpoint(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if calls.Add(1) == 1 {
+			fmt.Fprint(w, `{"status":"stopped","qemuReady":true,"vmid":"invalid"}`)
+			return
+		}
+		fmt.Fprint(w, `{"status":"stopped","lock":false,"vmid":200}`)
+	}))
+	defer server.Close()
+	// Identical URLs make the request order deterministic despite endpoint shuffling.
+	c := NewClient(&config.ProxmoxAPIConfig{APIURLs: []string{server.URL, server.URL}, Timeout: 2})
+	defer c.restyClient.Close()
+	v, err := c.GetVM("user-test", 200)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), calls.Load())
+	assert.False(t, v.QemuReady, "An omitted readiness flag must not retain a partially decoded value from a failed attempt")
+}
+
 func TestCreateRequestUsesSeparateTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {

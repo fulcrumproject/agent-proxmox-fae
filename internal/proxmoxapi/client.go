@@ -407,6 +407,8 @@ func (c *Client) getVM(ctx context.Context, username string, vmid int) (*vmagent
 	var vm vmagent.Vm
 
 	_, err := c.executeWithFailover("getVM", func(baseURL string) (*resty.Response, error) {
+		// A failed decode may have populated flags; do not carry them into failover.
+		vm = vmagent.Vm{}
 		return c.restyClient.R().
 			SetContext(ctx).
 			SetHeader("PVE-User", username).
