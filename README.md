@@ -334,7 +334,8 @@ INTEGRATION_TESTS=1 go test -count=1 -v -timeout=60m ./internal/proxmoxapi \
 The test creates a uniquely named user/pool and VM, then verifies:
 - User/resource/template access and VM creation/readiness in either power state.
 - Conditional stop after readiness, preserving the final Stopped state.
-- Separate CPU, memory and disk updates, preserving unrelated fields.
+- Separate CPU, memory and disk updates, preserving unrelated fields. Reads are
+  polled for up to one minute after PATCH because visibility can lag acceptance.
 - Firewall rule creation, retrieval and deletion.
 - VM start, status/metric reads and stop.
 - VM deletion, confirmed by HTTP 404, not an arbitrary API failure.

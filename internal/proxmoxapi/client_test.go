@@ -203,19 +203,36 @@ func TestClientVMLifecycle(t *testing.T) {
 
 	// Partial updates must not send zeroes for unrelated fields.
 	cpus, memory, diskSize := 2, 2048, 21
+	cpuUpdateStarted := time.Now()
 	require.NoError(t, client.PatchVM(userID, vmid, &vmagent.VmPatch{CPUs: &cpus}))
-	updated, err := client.GetVM(userID, vmid)
-	require.NoError(t, err)
-	require.Equal(t, float64(cpus), updated.MaxCPU)
-	require.Equal(t, vm.MaxMem, updated.MaxMem, "CPU-only patch must preserve memory")
-	require.Equal(t, vm.MaxDisk, updated.MaxDisk, "CPU-only patch must preserve disk")
+	// FAE can acknowledge a patch before subsequent reads reflect it.
+	// Keep the same value/isolation assertions, with a bounded visibility wait.
+	require.EventuallyWithT(t, func(check *assert.CollectT) {
+		updated, err := client.GetVM(userID, vmid)
+		if !assert.NoError(check, err) {
+			return
+		}
+		assert.Equal(check, float64(cpus), updated.MaxCPU)
+		assert.Equal(check, vm.MaxMem, updated.MaxMem, "CPU-only patch must preserve memory")
+		assert.Equal(check, vm.MaxDisk, updated.MaxDisk, "CPU-only patch must preserve disk")
+		assert.Equal(check, "stopped", updated.Status)
+		assert.False(check, updated.Lock)
+	}, time.Minute, 2*time.Second, "CPU update must become visible without changing unrelated resources")
+	t.Logf("CPU update verified after %s", time.Since(cpuUpdateStarted).Round(time.Second))
 	require.NoError(t, client.PatchVM(userID, vmid, &vmagent.VmPatch{Memory: &memory}))
 	require.NoError(t, client.PatchVM(userID, vmid, &vmagent.VmPatch{DiskSize: &diskSize}))
-	updated, err = client.GetVM(userID, vmid)
-	require.NoError(t, err)
-	require.Equal(t, float64(cpus), updated.MaxCPU)
-	require.Equal(t, int64(memory)*1024*1024, updated.MaxMem)
-	require.Greater(t, updated.MaxDisk, vm.MaxDisk, "Disk patch must grow the disk")
+	require.EventuallyWithT(t, func(check *assert.CollectT) {
+		updated, err := client.GetVM(userID, vmid)
+		if !assert.NoError(check, err) {
+			return
+		}
+		assert.Equal(check, float64(cpus), updated.MaxCPU)
+		assert.Equal(check, int64(memory)*1024*1024, updated.MaxMem)
+		assert.Greater(check, updated.MaxDisk, vm.MaxDisk, "Disk patch must grow the disk")
+		assert.Equal(check, "stopped", updated.Status)
+		assert.False(check, updated.Lock)
+	}, time.Minute, 2*time.Second, "CPU, memory and disk updates must be visible before continuing")
+	t.Log("CPU, memory and disk updates verified")
 
 	rules := []vmagent.FirewallRule{
 		{Type: "in", Proto: "tcp", Action: "ACCEPT", Dport: "22", Comment: "Agent test SSH"},
